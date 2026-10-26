@@ -3,8 +3,10 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
-export function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase();
+
+export function ProtectedRoute({ children, allowedRoles = [] }) {
+  const { user, isAuthenticated, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -20,6 +22,21 @@ export function ProtectedRoute({ children }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (allowedRoles.length) {
+    const userRoleId = normalizeRole(user?.role_id);
+    const userRoleName = normalizeRole(user?.role_name);
+    const allowed = allowedRoles.some((role) => {
+      const normalizedRole = normalizeRole(role);
+      return normalizedRole === userRoleId || normalizedRole === userRoleName;
+    });
+
+    if (!allowed) {
+      const fallback =
+        userRoleId === '1' || userRoleName === 'admin' ? '/admin' : '/resident';
+      return <Navigate to={fallback} replace />;
+    }
   }
 
   return children;

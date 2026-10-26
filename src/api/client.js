@@ -2,9 +2,10 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export async function request(endpoint, options = {}) {
   const token = localStorage.getItem('bayanalert_token');
+  const isFormData = options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
     'Accept': 'application/json',
+    ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...(options.headers || {})
   };
 
@@ -69,4 +70,15 @@ export const api = {
   createCategory: (data) => request('/categories', { method: 'POST', body: data }),
   updateCategory: (id, data) => request(`/categories/${id}`, { method: 'PUT', body: data }),
   deleteCategory: (id) => request(`/categories/${id}`, { method: 'DELETE' }),
+
+
+  //add
+  getBarangays: () => request('/barangays'),
+  register: (data) =>request('/auth/register', {method: 'POST',body: data,}),
+  getCommunityDashboard: () => request('/reports/community'),
+  getResidentReports: () => request('/reports'),
+  getReportCategories: () => request('/hazard-categories'),
+  getStations: () => request('/stations'),
+  createResidentReport: (data) => request('/reports', { method: 'POST', body: data }),
+  updateResidentReport: (id, data) => request(`/reports/update/${id}`, { method: 'POST', body: data }),
 };

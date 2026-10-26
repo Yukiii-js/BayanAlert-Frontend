@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { 
-  FileText, 
   AlertTriangle, 
   Clock, 
   Users, 
@@ -12,8 +11,9 @@ import {
   Layers, 
   Loader2, 
   AlertCircle,
-  TrendingUp,
-  RefreshCw
+  RefreshCw,
+  Activity,
+  CheckCircle2
 } from 'lucide-react';
 
 export function Dashboard() {
@@ -21,22 +21,36 @@ export function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshError, setRefreshError] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('All categories');
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const hasDashboardData = useRef(false);
 
-  const loadDashboard = async () => {
-    setLoading(true);
-    setError('');
+  const loadDashboard = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
     try {
       const res = await api.getDashboard();
       setData(res.data);
+      hasDashboardData.current = true;
+      setError('');
+      setRefreshError('');
+      setLastUpdated(new Date());
     } catch (err) {
-      setError(err.message || 'Failed to fetch dashboard metrics.');
+      const message = err.message || 'Failed to fetch dashboard metrics.';
+      if (hasDashboardData.current) {
+        setRefreshError(message);
+      } else {
+        setError(message);
+      }
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadDashboard();
+    const refreshTimer = window.setInterval(() => loadDashboard(false), 60000);
+    return () => window.clearInterval(refreshTimer);
   }, []);
 
   if (loading) {
@@ -67,7 +81,18 @@ export function Dashboard() {
     );
   }
 
-  const { counts = {}, total_records = 0, report_count = 0, pending_reports = 0, active_users = 0, recent_reports = [], tables = {} } = data || {};
+  const {
+    counts = {},
+    total_records = 0,
+    report_count = 0,
+    pending_reports = 0,
+    active_users = 0,
+    recent_reports = [],
+    report_statuses = [],
+    table_availability = {},
+    unavailable_tables = [],
+    tables = {}
+  } = data || {};
 
   // Group tables
   const groups = {};
@@ -76,6 +101,14 @@ export function Dashboard() {
     if (!groups[groupName]) groups[groupName] = [];
     groups[groupName].push({ tableName, ...def });
   });
+  const visibleGroups = Object.entries(groups).filter(
+    ([groupName]) => selectedGroup === 'All categories' || groupName === selectedGroup
+  );
+  const totalStatuses = report_statuses.reduce(
+    (sum, item) => sum + Number(item.total || 0),
+    0
+  );
+  const isMonitoring = unavailable_tables.length === 0;
 
   return (
     <div className="space-y-8">
@@ -88,7 +121,21 @@ export function Dashboard() {
             A live operational view of BayanAlert data. Choose a register to review, add, or update records.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs text-slate-500">
+            {lastUpdated
+              ? `Updated ${lastUpdated.toLocaleTimeString()} · Auto-refreshes every minute`
+              : 'Monitoring'}
+          </span>
+          <button
+            type="button"
+            onClick={() => loadDashboard()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-3 py-2.5 border border-slate-700 hover:border-slate-600 text-slate-300 hover:text-white disabled:opacity-50 text-sm rounded-xl transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
           <Link
             to="/admin/tables/hazard_reports"
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition-colors"
@@ -98,6 +145,12 @@ export function Dashboard() {
           </Link>
         </div>
       </div>
+
+      {refreshError && (
+        <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          Latest refresh failed. Showing the last successful snapshot: {refreshError}
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -138,10 +191,81 @@ export function Dashboard() {
         </div>
       </div>
 
+      {/* Operational monitoring */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4" aria-label="Operational monitoring">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+                <Activity className="h-5 w-5 text-emerald-400" />
+                Report monitoring
+              </h2>
+              <p className="mt-1 text-xs text-slate-400">Current distribution of hazard reports by workflow status.</p>
+            </div>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+              isMonitoring
+                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+            }`}>
+              {isMonitoring ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+              {isMonitoring ? 'All registers available' : `${unavailable_tables.length} register${unavailable_tables.length === 1 ? '' : 's'} unavailable`}
+            </span>
+          </div>
+
+          {report_statuses.length ? (
+            <div className="mt-5 space-y-3">
+              {report_statuses.map(({ status, total }) => {
+                const amount = Number(total || 0);
+                const percentage = totalStatuses ? (amount / totalStatuses) * 100 : 0;
+                return (
+                  <div key={status || 'unknown'}>
+                    <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                      <span className="capitalize text-slate-300">{String(status || 'Unspecified').replace(/_/g, ' ')}</span>
+                      <span className="font-mono text-slate-400">{amount.toLocaleString()}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-5 text-sm text-slate-500">
+              {table_availability.hazard_reports === false
+                ? 'Report monitoring is unavailable because the hazard reports table is missing.'
+                : 'No report status data is available yet.'}
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+            <Database className="h-5 w-5 text-sky-400" />
+            Register availability
+          </h2>
+          <p className="mt-1 text-xs text-slate-400">Configured data categories checked against the database.</p>
+          <div className="mt-5 flex items-end gap-2">
+            <span className="text-3xl font-extrabold text-white">
+              {Object.values(table_availability).filter(Boolean).length}
+            </span>
+            <span className="mb-1 text-sm text-slate-500">/ {Object.keys(table_availability).length} available</span>
+          </div>
+          {unavailable_tables.length > 0 && (
+            <p className="mt-3 text-xs leading-5 text-amber-300">
+              Missing tables: {unavailable_tables.join(', ')}
+            </p>
+          )}
+        </div>
+      </section>
+
       {/* Main Grid: Database Registers & Recent Reports */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Table Groups (2 Cols) */}
-        <div className="lg:col-span-2 space-y-6">
+        <div id="registers" className="lg:col-span-2 space-y-6">
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-6">
               <div>
@@ -156,33 +280,71 @@ export function Dashboard() {
               </span>
             </div>
 
+            <div className="mb-5 flex flex-wrap gap-2" aria-label="Filter registers by category">
+              {['All categories', ...Object.keys(groups)].map((groupName) => (
+                <button
+                  key={groupName}
+                  type="button"
+                  onClick={() => setSelectedGroup(groupName)}
+                  aria-pressed={selectedGroup === groupName}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    selectedGroup === groupName
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                      : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {groupName}
+                </button>
+              ))}
+            </div>
+
             <div className="space-y-6">
-              {Object.entries(groups).map(([groupName, groupTables]) => (
+              {visibleGroups.map(([groupName, groupTables]) => (
                 <div key={groupName} className="space-y-3">
                   <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400">
                     <span>{groupName}</span>
                     <span className="text-slate-500 font-normal lowercase">{groupTables.length} registers</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {groupTables.map((tab) => (
-                      <Link
-                        key={tab.tableName}
-                        to={`/admin/tables/${tab.tableName}`}
-                        className="group p-4 rounded-xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700 transition-all flex items-start justify-between gap-3"
-                      >
-                        <div>
-                          <div className="text-sm font-semibold text-slate-200 group-hover:text-emerald-400 transition-colors">
-                            {tab.label}
+                    {groupTables.map((tab) => {
+                      const available = table_availability[tab.tableName] !== false;
+                      const registerContent = (
+                        <>
+                          <div>
+                            <div className={`text-sm font-semibold transition-colors ${available ? 'text-slate-200 group-hover:text-emerald-400' : 'text-slate-500'}`}>
+                              {tab.label}
+                            </div>
+                            <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                              {tab.description}
+                            </p>
                           </div>
-                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                            {tab.description}
-                          </p>
+                          <span className="flex-shrink-0 rounded-md border border-slate-700/40 bg-slate-900 px-2 py-0.5 text-xs font-mono font-medium text-slate-300">
+                            {available
+                              ? Number(counts[tab.tableName] ?? 0).toLocaleString()
+                              : 'Unavailable'}
+                          </span>
+                        </>
+                      );
+                      const className = `flex items-start justify-between gap-3 rounded-xl border p-4 transition-all ${
+                        available
+                          ? 'group border-slate-800 bg-slate-800/40 hover:border-slate-700 hover:bg-slate-800/80'
+                          : 'cursor-not-allowed border-amber-500/10 bg-slate-900/40 opacity-70'
+                      }`;
+
+                      return available ? (
+                        <Link
+                          key={tab.tableName}
+                          to={`/admin/tables/${tab.tableName}`}
+                          className={className}
+                        >
+                          {registerContent}
+                        </Link>
+                      ) : (
+                        <div key={tab.tableName} aria-disabled="true" className={className}>
+                          {registerContent}
                         </div>
-                        <span className="px-2 py-0.5 rounded-md text-xs font-mono font-medium bg-slate-900 text-slate-300 border border-slate-700/40 flex-shrink-0">
-                          {Number(counts[tab.tableName] ?? 0).toLocaleString()}
-                        </span>
-                      </Link>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))}

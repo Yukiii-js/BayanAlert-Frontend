@@ -38,6 +38,9 @@ Build output will be generated in `dist/`.
 
 ## Key Features
 - **Authentication**: JWT token storage, automatic authorization header injection, protected routes.
-- **Admin Dashboard**: Live operational overview, record statistics, register groups, and recent hazard reports.
+- **Admin Dashboard**: Auto-refreshing operational overview, report status monitoring, register availability checks, categorized register filters, and recent hazard reports.
 - **Dynamic Register Management**: Dynamic CRUD and table viewer for all BayanAlert tables (Hazard Reports, Users, Barangays, Stations, Evidence, Verifications, etc.).
 - **Hazard Categories**: Dedicated management interface for emergency categories.
+- **Resident Reports**: Loads the signed-in resident's saved reports and active categories/stations from LavaLust, supports report creation/updates and evidence uploads, and uses the shared API client configured by `VITE_API_URL`.
+
+The admin dashboard refreshes monitoring data every minute and supports manual refresh. Register categories are configured by group in the backend admin table registry; unavailable database tables are called out without preventing the rest of the dashboard from loading.

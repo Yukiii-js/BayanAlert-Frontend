@@ -8,12 +8,46 @@ import { Dashboard } from './pages/Dashboard';
 import { TableList } from './pages/TableList';
 import { TableForm } from './pages/TableForm';
 import { Categories } from './pages/Categories';
+import { GuestHome } from './pages/GuestHome';
+import { Register } from './pages/Register';
+import { ResidentLogin } from './pages/ResidentLogin';
+import { ResidentDashboard } from './pages/ResidentDashboard';
+import SubmittedReports from './pages/SubmittedReports';
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Public guest homepage */}
+          <Route path="/" element={<GuestHome />} />
+
+          {/* Public registration page */}
+          <Route path="/register" element={<Register />} />
+
+          {/* Public resident login page */}
+          <Route path="/resident-login" element={<ResidentLogin />} />
+
+          {/* Protected resident dashboard */}
+          <Route
+            path="/resident"
+            element={
+              <ProtectedRoute allowedRoles={['resident', 'user']}>
+                <ResidentDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected submitted reports route */}
+          <Route
+            path="/resident/submitted-reports"
+            element={
+              <ProtectedRoute allowedRoles={['resident', 'user']}>
+                <SubmittedReports />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
 
@@ -21,7 +55,7 @@ export default function App() {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['admin', 1]}>
                 <Layout>
                   <Dashboard />
                 </Layout>
@@ -32,7 +66,7 @@ export default function App() {
           <Route
             path="/admin/tables/:table"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['admin', 1]}>
                 <Layout>
                   <TableList />
                 </Layout>
@@ -43,7 +77,7 @@ export default function App() {
           <Route
             path="/admin/tables/:table/create"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['admin', 1]}>
                 <Layout>
                   <TableForm />
                 </Layout>
@@ -54,7 +88,7 @@ export default function App() {
           <Route
             path="/admin/tables/:table/edit/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['admin', 1]}>
                 <Layout>
                   <TableForm />
                 </Layout>
@@ -65,7 +99,7 @@ export default function App() {
           <Route
             path="/categories"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['admin', 1]}>
                 <Layout>
                   <Categories />
                 </Layout>
@@ -74,10 +108,11 @@ export default function App() {
           />
 
           {/* Fallback */}
-          <Route path="/" element={<Navigate to="/admin" replace />} />
-          <Route path="*" element={<Navigate to="/admin" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+
+    
   );
 }
