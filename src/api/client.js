@@ -76,6 +76,7 @@ export const api = {
   getBarangays: () => request('/barangays'),
   register: (data) =>request('/auth/register', {method: 'POST',body: data,}),
   getCommunityDashboard: () => request('/reports/community'),
+  getHazardMap: () => request('/map/reports'),
   getResidentReports: () => request('/reports'),
   getReportCategories: () => request('/hazard-categories'),
   getStations: () => request('/stations'),

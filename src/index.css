@@ -11,6 +11,57 @@ body {
   background-color: #0b0f19;
 }
 
+.hazard-leaflet-map {
+  width: 100%;
+  min-height: 320px;
+  background: #182c3c;
+}
+
+.hazard-leaflet-map .leaflet-control-attribution {
+  background: rgb(2 6 23 / 85%);
+  color: #94a3b8;
+}
+
+.hazard-leaflet-map .leaflet-control-attribution a {
+  color: #34d399;
+}
+
+.hazard-map-marker {
+  background: transparent;
+  border: 0;
+}
+
+.hazard-map-marker > span {
+  display: flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--marker-color);
+  box-shadow: 0 3px 10px rgb(0 0 0 / 40%);
+}
+
+.hazard-map-marker > span > span {
+  width: 9px;
+  height: 9px;
+  border: 2px solid white;
+  border-radius: 50%;
+}
+
+.hazard-map-popup {
+  display: grid;
+  gap: 5px;
+  color: #0f172a;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.hazard-map-popup strong {
+  font-size: 13px;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

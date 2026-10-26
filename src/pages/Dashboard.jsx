@@ -15,6 +15,7 @@ import {
   Activity,
   CheckCircle2
 } from 'lucide-react';
+import { HazardMap } from '../components/HazardMap';
 
 export function Dashboard() {
   const { user } = useAuth();
@@ -261,6 +262,8 @@ export function Dashboard() {
           )}
         </div>
       </section>
+
+      <HazardMap height="h-[420px]" />
 
       {/* Main Grid: Database Registers & Recent Reports */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -22,45 +22,10 @@ import {
   CheckCircle2,
   LockKeyhole,
 } from 'lucide-react';
+import { HazardMap } from '../components/HazardMap';
 
 export function GuestHome() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [category, setCategory] = useState('All Categories');
-
-  const hazardPins = [
-    {
-      id: 1,
-      name: 'Flood Risk',
-      location: 'Barangay San Vicente',
-      category: 'Flood',
-      status: 'Verified',
-      color: 'bg-emerald-500',
-      position: 'left-[28%] top-[35%]',
-    },
-    {
-      id: 2,
-      name: 'Road Hazard',
-      location: 'Barangay Calero',
-      category: 'Road Hazard',
-      status: 'Pending',
-      color: 'bg-amber-500',
-      position: 'left-[56%] top-[53%]',
-    },
-    {
-      id: 3,
-      name: 'Fire Incident',
-      location: 'Barangay Lalud',
-      category: 'Fire',
-      status: 'Verified',
-      color: 'bg-emerald-500',
-      position: 'left-[74%] top-[29%]',
-    },
-  ];
-
-  const filteredPins =
-    category === 'All Categories'
-      ? hazardPins
-      : hazardPins.filter((pin) => pin.category === category);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -324,172 +289,7 @@ export function GuestHome() {
         {/* Map and Sidebar */}
         <section className="grid items-start gap-6 xl:grid-cols-[1.7fr_0.8fr]">
 
-          {/* Hazard Map */}
-          <div
-            id="hazard-map"
-            className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900"
-          >
-            <div className="flex flex-col justify-between gap-4 border-b border-slate-800 p-5 sm:flex-row sm:items-center">
-              <div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-emerald-400" />
-                  <h2 className="font-bold text-white">
-                    Community Hazard Map
-                  </h2>
-                </div>
-                <p className="mt-2 text-xs text-slate-400">
-                  Calapan City, Oriental Mindoro
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="hazard-category" className="sr-only">
-                  Filter hazard category
-                </label>
-                <select
-                  id="hazard-category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500 sm:w-auto"
-                >
-                  <option>All Categories</option>
-                  <option>Flood</option>
-                  <option>Fire</option>
-                  <option>Landslide</option>
-                  <option>Road Hazard</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Illustrative map preview */}
-            <div className="relative h-[360px] overflow-hidden bg-[#182c3c] sm:h-[430px]">
-              <div
-                className="absolute inset-0 opacity-50"
-                style={{
-                  backgroundImage:
-                    'linear-gradient(rgba(148,163,184,0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.09) 1px, transparent 1px)',
-                  backgroundSize: '27px 27px',
-                }}
-              />
-
-              {/* Water area */}
-              <div className="absolute -left-[10%] -top-[18%] h-44 w-[120%] rotate-[-7deg] rounded-b-[50%] border-b-2 border-cyan-700/40 bg-cyan-900/30" />
-
-              {/* Decorative road lines */}
-              <svg
-                viewBox="0 0 800 430"
-                preserveAspectRatio="none"
-                className="absolute inset-0 h-full w-full"
-                aria-hidden="true"
-              >
-                <path
-                  d="M -20 370 C 160 280, 230 190, 430 215 S 670 150, 830 70"
-                  stroke="#64748b"
-                  strokeWidth="17"
-                  fill="none"
-                  opacity="0.7"
-                />
-                <path
-                  d="M -20 370 C 160 280, 230 190, 430 215 S 670 150, 830 70"
-                  stroke="#cbd5e1"
-                  strokeWidth="2"
-                  fill="none"
-                  opacity="0.8"
-                />
-                <path
-                  d="M 130 450 C 250 320, 340 260, 500 100"
-                  stroke="#64748b"
-                  strokeWidth="12"
-                  fill="none"
-                  opacity="0.6"
-                />
-                <path
-                  d="M 130 450 C 250 320, 340 260, 500 100"
-                  stroke="#94a3b8"
-                  strokeWidth="2"
-                  fill="none"
-                  opacity="0.8"
-                />
-                <path
-                  d="M 360 450 C 400 330, 590 270, 830 300"
-                  stroke="#64748b"
-                  strokeWidth="10"
-                  fill="none"
-                  opacity="0.6"
-                />
-              </svg>
-
-              <span className="absolute left-[10%] top-[30%] text-[10px] font-semibold tracking-wider text-slate-300/70">
-                BARANGAY ZONE
-              </span>
-              <span className="absolute left-[38%] top-[47%] text-[10px] font-semibold tracking-wider text-slate-300/70">
-                CALAPAN CITY
-              </span>
-              <span className="absolute left-[63%] top-[70%] text-[10px] font-semibold tracking-wider text-slate-300/70">
-                COMMUNITY AREA
-              </span>
-
-              {filteredPins.map((pin) => (
-                <div
-                  key={pin.id}
-                  title={`${pin.name} — ${pin.location} (${pin.status})`}
-                  className={`absolute ${pin.position} group z-10`}
-                >
-                  <div className={`relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-white/80 ${pin.color} shadow-lg shadow-black/30 transition group-hover:scale-110`}>
-                    <AlertTriangle className="h-4 w-4 text-white" />
-                    <span className="absolute inset-[-6px] animate-ping rounded-full border border-white/20" />
-                  </div>
-
-                  <div className="absolute bottom-10 left-1/2 hidden w-40 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-950 p-3 shadow-xl group-hover:block">
-                    <p className="text-xs font-bold text-white">{pin.name}</p>
-                    <p className="mt-1 text-[10px] text-slate-400">{pin.location}</p>
-                    <p className="mt-2 text-[10px] text-emerald-400">{pin.status}</p>
-                  </div>
-                </div>
-              ))}
-
-              {/* Map legend */}
-              <div className="absolute right-3 top-3 rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl sm:right-5 sm:top-5">
-                <p className="mb-3 text-xs font-bold text-white">Map Legend</p>
-                <div className="space-y-2 text-[10px] text-slate-300">
-                  <p className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                    Verified
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                    Pending
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
-                    Disputed
-                  </p>
-                </div>
-              </div>
-
-              <div className="absolute bottom-3 left-3 rounded-lg border border-slate-700 bg-slate-950/90 px-3 py-2 text-[10px] text-slate-300">
-                Illustrative map · Sample markers
-              </div>
-
-              <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/90 px-3 py-2 text-[10px] text-slate-300">
-                <MapPin className="h-3.5 w-3.5 text-emerald-400" />
-                {filteredPins.length} sample markers
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 border-t border-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-slate-500">
-                Sample information for interface preview only.
-              </p>
-              <Link
-                to="/register"
-                className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-400 hover:text-emerald-300"
-              >
-                Join to submit a report
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
+          <HazardMap id="hazard-map" height="h-[430px]" />
 
           {/* Right Sidebar */}
           <aside className="space-y-5">
@@ -548,8 +348,7 @@ export function GuestHome() {
                   Stay informed
                 </p>
                 <p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-slate-500">
-                  Public incident updates will appear here when connected
-                  to the system database.
+                  Mapped hazard reports are loaded from the BayanAlert database.
                 </p>
               </div>
 

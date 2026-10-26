@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
+import { HazardMap } from '../components/HazardMap';
 
 const EMPTY_DASHBOARD = {
   reports: [],
@@ -323,6 +324,8 @@ export function ResidentDashboard() {
               </article>
             ))}
           </div>
+
+          <HazardMap height="h-[420px]" />
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 xl:col-span-2">

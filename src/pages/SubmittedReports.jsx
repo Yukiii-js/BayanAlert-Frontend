@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { HazardMap } from '../components/HazardMap';
 
 const EMPTY_FORM = {
   category_id: '',
@@ -31,6 +32,8 @@ const EMPTY_FORM = {
   title: '',
   description: '',
   address_details: '',
+  latitude: '',
+  longitude: '',
 };
 
 function formatStatus(status) {
@@ -238,6 +241,8 @@ export default function SubmittedReports() {
       title: report.title || '',
       description: report.description || '',
       address_details: report.address_details || '',
+      latitude: report.latitude || '',
+      longitude: report.longitude || '',
     });
     setEvidenceFiles([]);
     setExistingEvidence(report.evidence || []);
@@ -328,6 +333,8 @@ export default function SubmittedReports() {
         body.append('title', form.title.trim());
         body.append('description', form.description.trim());
         body.append('address_details', form.address_details.trim());
+        body.append('latitude', form.latitude);
+        body.append('longitude', form.longitude);
 
         evidenceFiles.forEach((file) => {
           body.append('evidence[]', file);
@@ -339,6 +346,8 @@ export default function SubmittedReports() {
           title: form.title.trim(),
           description: form.description.trim(),
           address_details: form.address_details.trim(),
+          latitude: form.latitude || null,
+          longitude: form.longitude || null,
         };
       }
 
@@ -645,6 +654,24 @@ export default function SubmittedReports() {
                     placeholder="Enter the barangay, street, or specific location"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                   />
+                </div>
+
+                <div className="md:col-span-2">
+                  <HazardMap
+                    selectable
+                    height="h-[320px]"
+                    selectedLocation={form.latitude && form.longitude
+                      ? { latitude: form.latitude, longitude: form.longitude }
+                      : null}
+                    onLocationSelect={({ latitude, longitude }) => {
+                      setForm((previous) => ({ ...previous, latitude, longitude }));
+                    }}
+                  />
+                  <p className="mt-2 text-[10px] text-slate-400">
+                    {form.latitude && form.longitude
+                      ? `Selected location: ${form.latitude}, ${form.longitude}`
+                      : 'Select a point on the map to include precise hazard coordinates (optional).'}
+                  </p>
                 </div>
 
                 <div className="md:col-span-2">
