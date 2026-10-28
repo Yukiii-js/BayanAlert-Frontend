@@ -16,21 +16,28 @@ Modern single-page application (SPA) frontend for **BayanAlert**, connecting to 
 npm install
 ```
 
-### 2. Configure Environment (Optional)
-If running the backend on a different port than `http://localhost:8000`:
-Create `.env` based on `.env.example`:
+### 2. Start the Backend
+Start Apache and MySQL in Laragon. With the backend checked out at
+`C:\laragon\www\BayanAlert-Backend`, Vite proxies `/api` requests to
+`http://localhost/BayanAlert-Backend/public/api`.
+
+Import the BayanAlert database schema and configure the backend `.env` if your
+MySQL settings differ from the local defaults.
+
+### 3. Configure Environment (Optional)
+The default `VITE_API_URL=/api` uses the Vite proxy above. If the backend is
+served from a different URL, create `.env` based on `.env.example` and set:
 ```env
 VITE_API_URL=http://localhost:8000/api
 ```
-*(By default in development, Vite proxies `/api` requests to `http://localhost:8000`)*
 
-### 3. Start Development Server
+### 4. Start Development Server
 ```bash
 npm run dev
 ```
 The app will be running at `http://localhost:5173`.
 
-### 4. Build for Production
+### 5. Build for Production
 ```bash
 npm run build
 ```

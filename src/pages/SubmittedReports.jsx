@@ -22,7 +22,7 @@ import {
   CheckCircle,
   RefreshCw,
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, REPORTS_UPDATED_EVENT } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { HazardMap } from '../components/HazardMap';
 
@@ -363,6 +363,7 @@ export default function SubmittedReports() {
           ? 'Your report was updated successfully.'
           : 'Your hazard report was submitted successfully.'
       );
+      window.dispatchEvent(new Event(REPORTS_UPDATED_EVENT));
 
       await loadPageData();
     } catch (error) {

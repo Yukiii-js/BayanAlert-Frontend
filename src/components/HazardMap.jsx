@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { AlertCircle, Loader2, MapPin, RefreshCw } from 'lucide-react';
-import { api } from '../api/client';
+import { api, REPORTS_UPDATED_EVENT } from '../api/client';
 import 'leaflet/dist/leaflet.css';
 
 const CALAPAN_CENTER = [13.411, 121.18];
@@ -81,17 +81,20 @@ export function HazardMap({
   useEffect(() => {
     loadMapData();
     const timer = window.setInterval(loadMapData, 60000);
-    return () => window.clearInterval(timer);
+    window.addEventListener(REPORTS_UPDATED_EVENT, loadMapData);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener(REPORTS_UPDATED_EVENT, loadMapData);
+    };
   }, []);
 
   useEffect(() => {
     if (!mapElement.current || mapInstance.current) return undefined;
 
     const map = L.map(mapElement.current, { scrollWheelZoom: false }).setView(CALAPAN_CENTER, 13);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20,
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
     }).addTo(map);
     markerLayer.current = L.layerGroup().addTo(map);
     selectionLayer.current = L.layerGroup().addTo(map);

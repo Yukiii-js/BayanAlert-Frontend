@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+export const REPORTS_UPDATED_EVENT = 'bayanalert:reports-updated';
 
 export async function request(endpoint, options = {}) {
   const token = localStorage.getItem('bayanalert_token');
