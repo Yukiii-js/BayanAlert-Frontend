@@ -4,6 +4,7 @@ import {
   Activity,
   AlertCircle,
   Bell,
+  Check,
   CheckCircle2,
   Clock3,
   FileWarning,
@@ -13,6 +14,8 @@ import {
   PlusCircle,
   RefreshCw,
   ShieldAlert,
+  ThumbsDown,
+  ThumbsUp,
   User,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -69,6 +72,9 @@ export function ResidentDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [notificationError, setNotificationError] = useState('');
+  const [voteError, setVoteError] = useState('');
+  const [votingReportId, setVotingReportId] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [activeSection, setActiveSection] = useState('dashboard');
@@ -153,6 +159,56 @@ export function ResidentDashboard() {
     navigate('/resident-login', { replace: true });
   }
 
+  async function markAlertRead(alert) {
+    if ([1, '1', true].includes(alert.is_read)) return;
+    setNotificationError('');
+    try {
+      await api.markNotificationRead(alert.notification_id);
+      setDashboard((current) => ({
+        ...current,
+        alerts: current.alerts.map((item) => (
+          item.notification_id === alert.notification_id
+            ? { ...item, is_read: 1 }
+            : item
+        )),
+      }));
+    } catch (requestError) {
+      setNotificationError(requestError.message || 'Unable to mark this alert as read.');
+    }
+  }
+
+  async function handleReportVote(report, choice) {
+    setVoteError('');
+    setVotingReportId(report.report_id);
+
+    try {
+      const vote = report.my_vote === choice ? null : choice;
+      const response = await api.voteOnReport(report.report_id, vote);
+      const summary = response?.data;
+      if (!summary || summary.report_id !== report.report_id) {
+        throw new Error('The server returned an invalid vote response.');
+      }
+
+      setDashboard((current) => ({
+        ...current,
+        reports: current.reports.map((item) => (
+          item.report_id === report.report_id
+            ? {
+                ...item,
+                confirm_count: summary.confirm_count,
+                dispute_count: summary.dispute_count,
+                my_vote: summary.my_vote,
+              }
+            : item
+        )),
+      }));
+    } catch (requestError) {
+      setVoteError(requestError.message || 'Unable to save your vote.');
+    } finally {
+      setVotingReportId(null);
+    }
+  }
+
   const navItems = [
     { label: 'Dashboard', id: 'dashboard', icon: Activity },
     { label: 'Incident Feed', id: 'incident-feed', icon: FileWarning },
@@ -220,6 +276,11 @@ export function ResidentDashboard() {
               >
                 <Icon className="h-4 w-4" />
                 {label}
+                {id === 'alerts' && unreadAlerts > 0 && (
+                  <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    {unreadAlerts > 99 ? '99+' : unreadAlerts}
+                  </span>
+                )}
               </button>
             ))}
             <Link
@@ -258,6 +319,11 @@ export function ResidentDashboard() {
             >
               <Icon className="h-3.5 w-3.5" />
               {label}
+              {id === 'alerts' && unreadAlerts > 0 && (
+                <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                  {unreadAlerts > 99 ? '99+' : unreadAlerts}
+                </span>
+              )}
             </button>
           ))}
           <Link
@@ -439,6 +505,12 @@ export function ResidentDashboard() {
             </div>
           </div>
 
+          {voteError && (
+            <div role="alert" className="mt-4 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
+              {voteError}
+            </div>
+          )}
+
           <div className="space-y-3 pt-4">
             {filteredReports.map((report) => (
               <article key={report.report_id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-emerald-500/30">
@@ -461,6 +533,45 @@ export function ResidentDashboard() {
                   <span className="flex shrink-0 items-center gap-1.5 text-[10px] text-slate-500">
                     <Clock3 className="h-3.5 w-3.5" />
                     {formatDate(report.submitted_at)}
+                  </span>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-3">
+                  {report.can_vote === 1 || report.can_vote === '1' || report.can_vote === true ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleReportVote(report, 'confirm')}
+                        disabled={votingReportId === report.report_id}
+                        aria-pressed={report.my_vote === 'confirm'}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
+                          report.my_vote === 'confirm'
+                            ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200'
+                            : 'border-slate-700 text-slate-300 hover:border-emerald-500/40 hover:text-emerald-300'
+                        }`}
+                      >
+                        <ThumbsUp className="h-3.5 w-3.5" />
+                        Confirm <span>{Number(report.confirm_count || 0)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleReportVote(report, 'dispute')}
+                        disabled={votingReportId === report.report_id}
+                        aria-pressed={report.my_vote === 'dispute'}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
+                          report.my_vote === 'dispute'
+                            ? 'border-rose-500/50 bg-rose-500/15 text-rose-200'
+                            : 'border-slate-700 text-slate-300 hover:border-rose-500/40 hover:text-rose-300'
+                        }`}
+                      >
+                        <ThumbsDown className="h-3.5 w-3.5" />
+                        Dispute <span>{Number(report.dispute_count || 0)}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <p className="text-[10px] text-slate-500">You can’t vote on your own report.</p>
+                  )}
+                  <span className="ml-auto text-[10px] text-slate-500">
+                    Community feedback
                   </span>
                 </div>
               </article>
@@ -499,6 +610,12 @@ export function ResidentDashboard() {
             </span>
           </div>
 
+          {notificationError && (
+            <div role="alert" className="mb-4 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
+              {notificationError}
+            </div>
+          )}
+
           {dashboard.alerts.length ? (
             <div className="space-y-3">
               {dashboard.alerts.map((alert) => (
@@ -516,6 +633,17 @@ export function ResidentDashboard() {
                     <p className="mt-1 text-xs leading-5 text-slate-400">{alert.message}</p>
                     <p className="mt-2 text-[10px] text-slate-500">{formatDate(alert.created_at)}</p>
                   </div>
+                  {![1, '1', true].includes(alert.is_read) && (
+                    <button
+                      type="button"
+                      onClick={() => markAlertRead(alert)}
+                      aria-label="Mark notification as read"
+                      title="Mark as read"
+                      className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-emerald-500/10 hover:text-emerald-300"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                  )}
                 </article>
               ))}
             </div>

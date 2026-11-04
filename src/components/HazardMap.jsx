@@ -88,10 +88,10 @@ export function HazardMap({
     if (!mapElement.current || mapInstance.current) return undefined;
 
     const map = L.map(mapElement.current, { scrollWheelZoom: false }).setView(CALAPAN_CENTER, 13);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       subdomains: 'abcd',
-      maxZoom: 20,
+      maxZoom: 19,
     }).addTo(map);
     markerLayer.current = L.layerGroup().addTo(map);
     selectionLayer.current = L.layerGroup().addTo(map);
@@ -189,7 +189,7 @@ export function HazardMap({
           </h2>
           <p className="mt-2 text-xs text-slate-400">
             {selectable
-              ? 'Click the map to select the incident location.'
+              ? 'Click the map to select the incident location and look up its address.'
               : 'Calapan City, Oriental Mindoro · Live database locations'}
           </p>
         </div>
@@ -248,7 +248,7 @@ export function HazardMap({
             <p className="mt-1 text-xs leading-5 text-slate-400">
               {mapData.coordinates_available
                 ? 'New reports with a selected map location will appear here. No sample markers are shown.'
-                : 'Apply the LavaLust report-coordinate migration to enable saving and displaying report locations.'}
+                : 'This database is missing latitude and longitude columns. Apply migration 003 or the SQL update in the backend README to enable report locations.'}
             </p>
           </div>
         )}

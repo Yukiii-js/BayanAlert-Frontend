@@ -34,6 +34,7 @@ export async function request(endpoint, options = {}) {
         if (!endpoint.includes('/auth/login')) {
           localStorage.removeItem('bayanalert_token');
           localStorage.removeItem('bayanalert_user');
+          localStorage.removeItem('bayanalert_session_role');
           window.dispatchEvent(new Event('auth:unauthorized'));
         }
       }
@@ -55,6 +56,9 @@ export const api = {
 
   // Admin
   getDashboard: () => request('/admin/dashboard'),
+  getNotifications: () => request('/notifications'),
+  markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: 'POST' }),
+  createAnnouncement: (data) => request('/admin/announcements', { method: 'POST', body: data }),
   getTables: () => request('/admin/tables'),
   getTableRows: (table, search = '', page = 1) => 
     request(`/admin/tables/${table}?q=${encodeURIComponent(search)}&page=${page}`),
@@ -79,7 +83,10 @@ export const api = {
   getHazardMap: () => request('/map/reports'),
   getResidentReports: () => request('/reports'),
   getReportCategories: () => request('/hazard-categories'),
-  getStations: () => request('/stations'),
   createResidentReport: (data) => request('/reports', { method: 'POST', body: data }),
   updateResidentReport: (id, data) => request(`/reports/update/${id}`, { method: 'POST', body: data }),
+  voteOnReport: (id, vote) => request(`/reports/${id}/vote`, {
+    method: 'POST',
+    body: { vote },
+  }),
 };

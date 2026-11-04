@@ -13,6 +13,7 @@ import { Register } from './pages/Register';
 import { ResidentLogin } from './pages/ResidentLogin';
 import { ResidentDashboard } from './pages/ResidentDashboard';
 import SubmittedReports from './pages/SubmittedReports';
+import { Notifications } from './pages/Notifications';
 
 export default function App() {
   return (
@@ -58,6 +59,17 @@ export default function App() {
               <ProtectedRoute allowedRoles={['admin', 1]}>
                 <Layout>
                   <Dashboard />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/notifications"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 1]}>
+                <Layout>
+                  <Notifications />
                 </Layout>
               </ProtectedRoute>
             }

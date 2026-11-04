@@ -25,7 +25,7 @@ export function Login() {
     setIsSubmitting(true);
 
     try {
-      await login(username.trim(), password);
+      await login(username.trim(), password, 'admin');
       navigate(from, { replace: true });
     } catch (err) {
       setError(err.message || 'Invalid credentials or unable to connect to server.');

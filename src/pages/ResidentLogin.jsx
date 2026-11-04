@@ -21,7 +21,7 @@ export function ResidentLogin() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { login, logout } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -39,15 +39,7 @@ export function ResidentLogin() {
     setIsSubmitting(true);
 
     try {
-      const user = await login(username.trim(), password);
-
-      // Prevent resident accounts from entering admin pages.
-      const roleName = String(user?.role_name || '').trim().toLowerCase();
-      if (roleName !== 'resident' && roleName !== 'user') {
-        await logout();
-        setError('This login is for resident accounts only.');
-        return;
-      }
+      const user = await login(username.trim(), password, 'resident');
 
       navigate(from.startsWith('/admin') ? '/resident' : from, {
         replace: true,

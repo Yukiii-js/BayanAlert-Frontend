@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ShieldAlert,
@@ -28,7 +28,6 @@ import { HazardMap } from '../components/HazardMap';
 
 const EMPTY_FORM = {
   category_id: '',
-  station_id: '',
   title: '',
   description: '',
   address_details: '',
@@ -115,13 +114,14 @@ export default function SubmittedReports() {
 
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [stations, setStations] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState('');
   const [formError, setFormError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [addressLookup, setAddressLookup] = useState('idle');
+  const [addressLookupError, setAddressLookupError] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
@@ -133,6 +133,9 @@ export default function SubmittedReports() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [evidenceFiles, setEvidenceFiles] = useState([]);
   const [existingEvidence, setExistingEvidence] = useState([]);
+  const addressLookupTimer = useRef(null);
+  const addressLookupController = useRef(null);
+  const lastAddressLookupAt = useRef(0);
 
   async function loadPageData() {
     setLoading(true);
@@ -142,7 +145,6 @@ export default function SubmittedReports() {
       const results = await Promise.all([
         api.getResidentReports(),
         api.getReportCategories(),
-        api.getStations(),
       ]);
 
       const reportList = getList(results[0], ['reports']).map(normalizeReport);
@@ -150,14 +152,12 @@ export default function SubmittedReports() {
         'categories',
         'hazard_categories',
       ]);
-      const stationList = getList(results[2], ['stations']);
 
       setReports(reportList);
       setCategories(categoryList);
-      setStations(stationList);
     } catch (error) {
       setPageError(
-        `${error.message}. Check that the reports, hazard-categories, and stations API routes exist in your LavaLust backend.`
+        `${error.message}. Check that the reports and hazard-categories API routes exist in your LavaLust backend.`
       );
     } finally {
       setLoading(false);
@@ -209,6 +209,9 @@ export default function SubmittedReports() {
   );
 
   function resetForm() {
+    cancelAddressLookup();
+    setAddressLookup('idle');
+    setAddressLookupError('');
     setForm(EMPTY_FORM);
     setEvidenceFiles([]);
     setExistingEvidence([]);
@@ -218,6 +221,9 @@ export default function SubmittedReports() {
   }
 
   function openCreateForm() {
+    cancelAddressLookup();
+    setAddressLookup('idle');
+    setAddressLookupError('');
     setEditingReport(null);
     setForm(EMPTY_FORM);
     setEvidenceFiles([]);
@@ -234,10 +240,12 @@ export default function SubmittedReports() {
       return;
     }
 
+    cancelAddressLookup();
+    setAddressLookup('idle');
+    setAddressLookupError('');
     setEditingReport(report);
     setForm({
       category_id: String(report.category_id ?? ''),
-      station_id: String(report.station_id ?? ''),
       title: report.title || '',
       description: report.description || '',
       address_details: report.address_details || '',
@@ -261,10 +269,86 @@ export default function SubmittedReports() {
   function handleFormChange(event) {
     const { name, value } = event.target;
 
+    if (name === 'address_details') {
+      cancelAddressLookup();
+      setAddressLookup('idle');
+      setAddressLookupError('');
+    }
+
     setForm((previous) => ({
       ...previous,
       [name]: value,
     }));
+  }
+
+  function cancelAddressLookup() {
+    if (addressLookupTimer.current) {
+      window.clearTimeout(addressLookupTimer.current);
+      addressLookupTimer.current = null;
+    }
+    addressLookupController.current?.abort();
+    addressLookupController.current = null;
+  }
+
+  useEffect(() => () => cancelAddressLookup(), []);
+
+  function handleMapLocationSelect({ latitude, longitude }) {
+    cancelAddressLookup();
+    setAddressLookup('loading');
+    setAddressLookupError('');
+    setForm((previous) => ({ ...previous, latitude, longitude }));
+
+    const waitForRateLimit = Math.max(
+      350,
+      1100 - (Date.now() - lastAddressLookupAt.current)
+    );
+
+    addressLookupTimer.current = window.setTimeout(async () => {
+      const controller = new AbortController();
+      addressLookupController.current = controller;
+      lastAddressLookupAt.current = Date.now();
+
+      try {
+        const query = new URLSearchParams({
+          format: 'jsonv2',
+          lat: latitude,
+          lon: longitude,
+          zoom: '18',
+          addressdetails: '1',
+        });
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?${query}`,
+          {
+            headers: { 'Accept-Language': 'en' },
+            signal: controller.signal,
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`Address lookup failed (HTTP ${response.status}).`);
+        }
+
+        const result = await response.json();
+        if (typeof result.display_name !== 'string' || !result.display_name.trim()) {
+          throw new Error('No street address was found for this map point.');
+        }
+
+        setForm((previous) => ({
+          ...previous,
+          address_details: result.display_name.trim().slice(0, 255),
+        }));
+        setAddressLookup('idle');
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        setAddressLookup('error');
+        setAddressLookupError(
+          error.message || 'Could not look up this address. Enter it manually.'
+        );
+      } finally {
+        if (addressLookupController.current === controller) {
+          addressLookupController.current = null;
+        }
+      }
+    }, waitForRateLimit);
   }
 
   function handleFileChange(event) {
@@ -329,7 +413,6 @@ export default function SubmittedReports() {
       if (hasFiles) {
         body = new FormData();
         body.append('category_id', form.category_id);
-        body.append('station_id', form.station_id);
         body.append('title', form.title.trim());
         body.append('description', form.description.trim());
         body.append('address_details', form.address_details.trim());
@@ -342,7 +425,6 @@ export default function SubmittedReports() {
       } else {
         body = {
           category_id: Number(form.category_id),
-          station_id: form.station_id ? Number(form.station_id) : null,
           title: form.title.trim(),
           description: form.description.trim(),
           address_details: form.address_details.trim(),
@@ -351,18 +433,19 @@ export default function SubmittedReports() {
         };
       }
 
+      let response;
       if (isEditing) {
-        await api.updateResidentReport(editingReport.report_id, body);
+        response = await api.updateResidentReport(editingReport.report_id, body);
       } else {
-        await api.createResidentReport(body);
+        response = await api.createResidentReport(body);
       }
 
       resetForm();
-      setSuccessMessage(
+      setSuccessMessage(response?.message || (
         isEditing
           ? 'Your report was updated successfully.'
           : 'Your hazard report was submitted successfully.'
-      );
+      ));
 
       await loadPageData();
     } catch (error) {
@@ -558,7 +641,14 @@ export default function SubmittedReports() {
               )}
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
+                <div className="col-span-full border-b border-slate-800 pb-2">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-300">
+                    1. Incident details
+                  </h3>
+                  <p className="mt-1 text-[10px] text-slate-500">Identify the hazard and describe what happened.</p>
+                </div>
+
+                <div className="md:col-span-2">
                   <label htmlFor="category_id" className="mb-1.5 block text-xs font-bold text-slate-300">
                     Hazard Category <span className="text-rose-400">*</span>
                   </label>
@@ -580,32 +670,6 @@ export default function SubmittedReports() {
                       </option>
                     ))}
                   </select>
-                </div>
-
-                <div>
-                  <label htmlFor="station_id" className="mb-1.5 block text-xs font-bold text-slate-300">
-                    Station (optional)
-                  </label>
-                  <select
-                    id="station_id"
-                    name="station_id"
-                    value={form.station_id}
-                    onChange={handleFormChange}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-100 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    <option value="">No station selected</option>
-                    {stations.map((station) => (
-                      <option
-                        key={station.station_id}
-                        value={station.station_id}
-                      >
-                        {station.station_name || station.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-[10px] text-slate-500">
-                    Leave blank if the report has not been assigned to a station.
-                  </p>
                 </div>
 
                 <div className="md:col-span-2">
@@ -640,6 +704,13 @@ export default function SubmittedReports() {
                   />
                 </div>
 
+                <div className="col-span-full border-b border-slate-800 pb-2 pt-2">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-300">
+                    2. Location
+                  </h3>
+                  <p className="mt-1 text-[10px] text-slate-500">Pinpoint the incident to fill its address automatically, or enter the address yourself.</p>
+                </div>
+
                 <div className="md:col-span-2">
                   <label htmlFor="address_details" className="mb-1.5 block text-xs font-bold text-slate-300">
                     Hazard Location / Address <span className="text-rose-400">*</span>
@@ -654,6 +725,11 @@ export default function SubmittedReports() {
                     placeholder="Enter the barangay, street, or specific location"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                   />
+                  <p className={`mt-1 text-[10px] ${addressLookupError ? 'text-rose-300' : 'text-slate-500'}`}>
+                    {addressLookup === 'loading'
+                      ? 'Looking up the selected map location...'
+                      : addressLookupError || 'Address lookup by OpenStreetMap. You can edit the suggested address.'}
+                  </p>
                 </div>
 
                 <div className="md:col-span-2">
@@ -663,15 +739,20 @@ export default function SubmittedReports() {
                     selectedLocation={form.latitude && form.longitude
                       ? { latitude: form.latitude, longitude: form.longitude }
                       : null}
-                    onLocationSelect={({ latitude, longitude }) => {
-                      setForm((previous) => ({ ...previous, latitude, longitude }));
-                    }}
+                    onLocationSelect={handleMapLocationSelect}
                   />
                   <p className="mt-2 text-[10px] text-slate-400">
                     {form.latitude && form.longitude
                       ? `Selected location: ${form.latitude}, ${form.longitude}`
                       : 'Select a point on the map to include precise hazard coordinates (optional).'}
                   </p>
+                </div>
+
+                <div className="col-span-full border-b border-slate-800 pb-2 pt-2">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-300">
+                    3. Supporting evidence
+                  </h3>
+                  <p className="mt-1 text-[10px] text-slate-500">Attach photos, video, or a document if available.</p>
                 </div>
 
                 <div className="md:col-span-2">
