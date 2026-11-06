@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ShieldAlert,
   Map,
   List,
   PlusCircle,
@@ -25,6 +24,7 @@ import {
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { HazardMap } from '../components/HazardMap';
+import { BrandLogo } from '../components/BrandLogo';
 
 const EMPTY_FORM = {
   category_id: '',
@@ -482,8 +482,8 @@ export default function SubmittedReports() {
       <header className="sticky top-0 z-30 border-b border-slate-700 bg-slate-950 text-white shadow-md">
         <div className="mx-auto flex min-h-[64px] max-w-[1500px] items-center justify-between gap-3 px-4 lg:px-7">
           <Link to="/resident" className="flex shrink-0 items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 shadow-lg shadow-emerald-900/30">
-              <ShieldAlert className="h-5 w-5" />
+            <span className="flex h-9 w-9 items-center justify-center">
+              <BrandLogo className="h-9 w-9" />
             </span>
             <span>
               <span className="block text-sm font-extrabold">BayanAlert</span>

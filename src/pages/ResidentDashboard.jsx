@@ -7,6 +7,7 @@ import {
   Check,
   CheckCircle2,
   Clock3,
+  Eye,
   FileWarning,
   Loader2,
   LogOut,
@@ -17,10 +18,12 @@ import {
   ThumbsDown,
   ThumbsUp,
   User,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../api/client';
+import { api, publicFileUrl } from '../api/client';
 import { HazardMap } from '../components/HazardMap';
+import { BrandLogo } from '../components/BrandLogo';
 
 const EMPTY_DASHBOARD = {
   reports: [],
@@ -65,6 +68,28 @@ function StatusBadge({ status }) {
   );
 }
 
+function EvidenceImage({ filePath, alt, className }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (!filePath || hasError) {
+    return (
+      <div className={`flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-center text-xs text-slate-500 ${className}`}>
+        Image preview unavailable
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={publicFileUrl(filePath)}
+      alt={alt}
+      loading="lazy"
+      onError={() => setHasError(true)}
+      className={className}
+    />
+  );
+}
+
 export function ResidentDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -77,6 +102,7 @@ export function ResidentDashboard() {
   const [votingReportId, setVotingReportId] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [selectedReport, setSelectedReport] = useState(null);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -251,8 +277,8 @@ export function ResidentDashboard() {
       <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 shadow-lg shadow-black/20 backdrop-blur">
         <div className="mx-auto flex min-h-[64px] max-w-[1500px] items-center justify-between gap-3 px-4 lg:px-7">
           <Link to="/resident" className="flex shrink-0 items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-lg shadow-emerald-900/30">
-              <ShieldAlert className="h-5 w-5" />
+            <span className="flex h-10 w-10 items-center justify-center">
+              <BrandLogo className="h-10 w-10" />
             </span>
             <span>
               <span className="block text-sm font-extrabold">BayanAlert</span>
@@ -514,7 +540,7 @@ export function ResidentDashboard() {
           <div className="space-y-3 pt-4">
             {filteredReports.map((report) => (
               <article key={report.report_id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-emerald-500/30">
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-bold text-white">{report.title}</h3>
@@ -529,13 +555,37 @@ export function ResidentDashboard() {
                       <span>{report.category_name || 'Uncategorized'}</span>
                       <span className="font-mono">{report.reference_number}</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedReport(report)}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-300"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      View details
+                    </button>
                   </div>
-                  <span className="flex shrink-0 items-center gap-1.5 text-[10px] text-slate-500">
-                    <Clock3 className="h-3.5 w-3.5" />
-                    {formatDate(report.submitted_at)}
-                  </span>
+                  <aside className="flex shrink-0 flex-col gap-2 sm:col-start-2 sm:row-start-1">
+                    <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                      <Clock3 className="h-3.5 w-3.5" />
+                      {formatDate(report.submitted_at)}
+                    </span>
+                    {report.evidence?.[0]?.file_path && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReport(report)}
+                        aria-label={`Preview report details and images for ${report.title}`}
+                        className="rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <EvidenceImage
+                          filePath={report.evidence[0].file_path}
+                          alt={`Photo evidence preview for ${report.title}`}
+                          className="h-28 w-full rounded-lg border border-slate-800 object-cover"
+                        />
+                      </button>
+                    )}
+                  </aside>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-3">
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-3 sm:mt-3">
                   {report.can_vote === 1 || report.can_vote === '1' || report.can_vote === true ? (
                     <>
                       <button
@@ -656,6 +706,108 @@ export function ResidentDashboard() {
           )}
         </section>
       </main>
+
+      {selectedReport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedReport(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="community-report-details-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 p-5">
+              <div>
+                <h2 id="community-report-details-title" className="text-base font-extrabold text-white">
+                  Report details
+                </h2>
+                <p className="mt-1 break-all font-mono text-xs text-slate-400">
+                  {selectedReport.reference_number || 'Reference unavailable'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedReport(null)}
+                aria-label="Close report details"
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-bold text-white">{selectedReport.title}</h3>
+                <StatusBadge status={selectedReport.status} />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  ['Hazard category', selectedReport.category_name],
+                  ['Barangay', selectedReport.barangay_name || 'Barangay not specified'],
+                  ['Submitted', formatDate(selectedReport.submitted_at)],
+                  [
+                    'Community feedback',
+                    `${Number(selectedReport.confirm_count || 0)} confirmations · ${Number(selectedReport.dispute_count || 0)} disputes`,
+                  ],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+                    <p className="mt-1 break-words text-sm text-slate-200">{value || 'Not provided'}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Description
+                </h4>
+                <p className="whitespace-pre-wrap rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-sm leading-6 text-slate-300">
+                  {selectedReport.description || 'No description provided.'}
+                </p>
+              </div>
+
+              {selectedReport.evidence?.length > 0 && (
+                <div>
+                  <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                    Photo evidence
+                  </h4>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {selectedReport.evidence.map((item, index) => (
+                      <a
+                        key={item.evidence_id || index}
+                        href={publicFileUrl(item.file_path)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <EvidenceImage
+                          filePath={item.file_path}
+                          alt={`Photo evidence ${index + 1} for ${selectedReport.title}`}
+                          className="max-h-96 min-h-40 w-full rounded-xl border border-slate-800 object-contain"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end border-t border-slate-800 p-4">
+              <button
+                type="button"
+                onClick={() => setSelectedReport(null)}
+                className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="border-t border-slate-800 bg-slate-900/40 px-4 py-5 text-center text-[10px] text-slate-500">
         BayanAlert · Live data from the community reporting database

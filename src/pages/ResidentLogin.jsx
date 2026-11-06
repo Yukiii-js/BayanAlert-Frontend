@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
-  ShieldAlert,
   User,
   Lock,
   AlertCircle,
@@ -13,6 +12,7 @@ import {
   LogIn,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { BrandLogo } from '../components/BrandLogo';
 
 export function ResidentLogin() {
   const [username, setUsername] = useState('');
@@ -74,8 +74,8 @@ export function ResidentLogin() {
 
         {/* Header */}
         <div className="mb-8 text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-xl shadow-emerald-500/20">
-            <ShieldAlert className="h-8 w-8" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+            <BrandLogo className="h-16 w-16" />
           </div>
 
           <h1 className="text-3xl font-extrabold tracking-tight text-white">

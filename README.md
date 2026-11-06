@@ -41,6 +41,8 @@ Build output will be generated in `dist/`.
 - **Admin Dashboard**: Auto-refreshing operational overview, report status monitoring, register availability checks, categorized register filters, and recent hazard reports.
 - **Dynamic Register Management**: Dynamic CRUD and table viewer for all BayanAlert tables (Hazard Reports, Users, Barangays, Stations, Evidence, Verifications, etc.).
 - **Hazard Categories**: Dedicated management interface for emergency categories.
+- **PDF Reports**: Admins can choose a date range and preview either a hazard report or a barangay activity report with resident totals, status summaries, and report history.
+- **BayanAlert Branding**: The supplied transparent logo is used across public, resident, and admin pages, as well as the browser tab icon.
 - **Resident Reports**: Loads the signed-in resident's saved reports and active categories/stations from LavaLust, supports report creation/updates and evidence uploads, and uses the shared API client configured by `VITE_API_URL`.
 
 The admin dashboard refreshes monitoring data every minute and supports manual refresh. Register categories are configured by group in the backend admin table registry; unavailable database tables are called out without preventing the rest of the dashboard from loading.

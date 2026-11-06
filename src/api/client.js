@@ -1,5 +1,15 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+export function publicFileUrl(filePath) {
+  if (typeof filePath !== 'string' || !filePath.trim()) return '';
+
+  const apiUrl = new URL(API_BASE_URL, window.location.origin);
+  const publicBasePath = apiUrl.pathname.replace(/\/api\/?$/, '/');
+  const relativePath = filePath.replace(/^\/+/, '');
+
+  return new URL(relativePath, `${apiUrl.origin}${publicBasePath}`).href;
+}
+
 export async function request(endpoint, options = {}) {
   const token = localStorage.getItem('bayanalert_token');
   const isFormData = options.body instanceof FormData;

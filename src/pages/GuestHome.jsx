@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ShieldAlert,
   MapPin,
   Map,
   FileWarning,
@@ -23,6 +22,7 @@ import {
   LockKeyhole,
 } from 'lucide-react';
 import { HazardMap } from '../components/HazardMap';
+import { BrandLogo } from '../components/BrandLogo';
 
 export function GuestHome() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -34,8 +34,8 @@ export function GuestHome() {
         <div className="mx-auto flex min-h-[76px] max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
 
           <Link to="/" className="flex shrink-0 items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">
-              <ShieldAlert className="h-6 w-6 text-white" />
+            <div className="flex h-11 w-11 items-center justify-center">
+              <BrandLogo className="h-11 w-11" />
             </div>
 
             <div>
@@ -450,7 +450,7 @@ export function GuestHome() {
         {/* Footer */}
         <footer className="flex flex-col gap-4 border-t border-slate-800 py-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-emerald-400" />
+            <BrandLogo className="h-8 w-8" />
             <span>
               © {new Date().getFullYear()} BayanAlert. Community safety matters.
             </span>

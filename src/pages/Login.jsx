@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ShieldAlert, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
+import { BrandLogo } from '../components/BrandLogo';
 
 export function Login() {
   const [username, setUsername] = useState('');
@@ -41,8 +42,8 @@ export function Login() {
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <div className="inline-flex w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 items-center justify-center text-white shadow-xl shadow-emerald-500/20 mb-4">
-            <ShieldAlert className="w-8 h-8" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+            <BrandLogo className="h-16 w-16" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">BayanAlert Admin</h1>
           <p className="text-sm text-slate-400 mt-1">Hazard & Emergency Incident Management</p>
@@ -115,6 +116,13 @@ export function Login() {
         <p className="text-center text-xs text-slate-600 mt-6">
           Authorized personnel only. All access is audited and recorded.
         </p>
+        <Link
+          to="/"
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 text-sm font-medium text-slate-400 transition hover:text-emerald-300"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Homepage
+        </Link>
       </div>
     </div>
   );

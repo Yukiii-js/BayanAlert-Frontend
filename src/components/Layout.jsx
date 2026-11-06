@@ -2,15 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
-  ShieldAlert, 
   LayoutDashboard, 
   Database, 
   Tags, 
   LogOut, 
   User, 
-  Bell
+  Bell,
+  FileText
 } from 'lucide-react';
 import { api } from '../api/client';
+import { BrandLogo } from './BrandLogo';
 
 export function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -58,8 +59,8 @@ export function Layout({ children }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link to="/admin" className="flex items-center gap-2.5 group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-                <ShieldAlert className="w-5 h-5" />
+              <div className="flex h-10 w-10 items-center justify-center transition-transform group-hover:scale-105">
+                <BrandLogo className="h-10 w-10" />
               </div>
               <div>
                 <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
@@ -113,6 +114,20 @@ export function Layout({ children }) {
               >
                 <Tags className="w-4 h-4" />
                 Hazard Categories
+              </NavLink>
+
+              <NavLink
+                to="/admin/reports"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`
+                }
+              >
+                <FileText className="w-4 h-4" />
+                PDF Reports
               </NavLink>
 
               <NavLink

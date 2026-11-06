@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -11,9 +11,16 @@ import { Categories } from './pages/Categories';
 import { GuestHome } from './pages/GuestHome';
 import { Register } from './pages/Register';
 import { ResidentLogin } from './pages/ResidentLogin';
-import { ResidentDashboard } from './pages/ResidentDashboard';
 import SubmittedReports from './pages/SubmittedReports';
 import { Notifications } from './pages/Notifications';
+
+const ResidentDashboard = lazy(() => import('./pages/ResidentDashboard').then((module) => ({
+  default: module.ResidentDashboard,
+})));
+
+const PdfReports = lazy(() => import('./pages/PdfReports').then((module) => ({
+  default: module.PdfReports,
+})));
 
 export default function App() {
   return (
@@ -34,7 +41,9 @@ export default function App() {
             path="/resident"
             element={
               <ProtectedRoute allowedRoles={['resident', 'user']}>
-                <ResidentDashboard />
+                <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-400">Loading community dashboard...</p>}>
+                  <ResidentDashboard />
+                </Suspense>
               </ProtectedRoute>
             }
           />
@@ -70,6 +79,19 @@ export default function App() {
               <ProtectedRoute allowedRoles={['admin', 1]}>
                 <Layout>
                   <Notifications />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/reports"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 1]}>
+                <Layout>
+                  <Suspense fallback={<p role="status" className="text-sm text-slate-400">Loading report tools...</p>}>
+                    <PdfReports />
+                  </Suspense>
                 </Layout>
               </ProtectedRoute>
             }
