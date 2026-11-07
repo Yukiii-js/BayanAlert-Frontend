@@ -1,12 +1,11 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Map,
-  List,
+  Activity,
+  FileWarning,
   PlusCircle,
   Bell,
-  User,
   LogOut,
   Search,
   MapPin,
@@ -111,6 +110,7 @@ function normalizeReport(report) {
 export default function SubmittedReports() {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -233,6 +233,12 @@ export default function SubmittedReports() {
     setShowForm(true);
     setSelectedReport(null);
   }
+
+  useEffect(() => {
+    if (!location.state?.openCreateReport) return;
+    openCreateForm();
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.key, location.pathname, location.state, navigate]);
 
   function openEditForm(report) {
     if (!canEdit(report)) {
@@ -461,87 +467,91 @@ export default function SubmittedReports() {
   }
 
   const navItems = [
-    { label: 'Map & Dashboard', to: '/resident', icon: Map },
+    { label: 'Dashboard', to: '/resident#dashboard', icon: Activity },
+    { label: 'Incident Feed', to: '/resident#incident-feed', icon: FileWarning },
     {
-      label: 'Submitted Reports',
-      to: '/resident/submitted-reports',
-      icon: List,
-    },
-    {
-      label: 'Submit Report',
+      label: 'Submit Reports',
       to: '/resident/submitted-reports',
       icon: PlusCircle,
-      action: openCreateForm,
+      state: { openCreateReport: true },
     },
     { label: 'Alerts', to: '/resident#alerts', icon: Bell },
-    { label: 'My Profile', to: '/resident/profile', icon: User },
   ];
+  const activeTab = location.pathname === '/resident/submitted-reports'
+    ? 'Submit Reports'
+    : location.hash === '#incident-feed'
+      ? 'Incident Feed'
+      : location.hash === '#alerts'
+        ? 'Alerts'
+        : 'Dashboard';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-slate-700 bg-slate-950 text-white shadow-md">
+      <header className="sticky top-0 z-30 border-b border-slate-700/80 bg-slate-900/80 text-white shadow-lg shadow-black/20 backdrop-blur-xl">
         <div className="mx-auto flex min-h-[64px] max-w-[1500px] items-center justify-between gap-3 px-4 lg:px-7">
-          <Link to="/resident" className="flex shrink-0 items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center">
-              <BrandLogo className="h-9 w-9" />
+          <Link to="/resident" className="flex shrink-0 items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center">
+              <BrandLogo className="h-10 w-10" />
             </span>
             <span>
               <span className="block text-sm font-extrabold">BayanAlert</span>
-              <span className="block text-[9px] text-slate-400">
-                Community Hazard Reporting
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-emerald-400">
+                Community safety
               </span>
             </span>
           </Link>
 
           <nav className="hidden items-center gap-1 lg:flex">
-            {navItems.map(({ label, to, icon: Icon, action }) => (
-              <button
+            {navItems.map(({ label, to, icon: Icon, state }) => (
+              <Link
                 key={label}
-                type="button"
-                onClick={action || (() => navigate(to))}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[11px] font-semibold transition ${
-                  label === 'Submitted Reports'
+                to={to}
+                state={state}
+                aria-current={activeTab === label ? 'page' : undefined}
+                className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                  activeTab === label
                     ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-4 w-4" />
                 {label}
-              </button>
+              </Link>
             ))}
           </nav>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-700 px-3 py-2 text-[10px] text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-[10px] font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white"
           >
             <LogOut className="h-3.5 w-3.5" />
             Logout
           </button>
         </div>
 
-        <nav className="flex gap-1 overflow-x-auto border-t border-slate-800 px-3 py-2 lg:hidden">
-          {navItems.map(({ label, to, icon: Icon, action }) => (
-            <button
+        <nav className="grid grid-cols-2 gap-1 border-t border-slate-800 px-3 py-2 lg:hidden">
+          {navItems.map(({ label, to, icon: Icon, state }) => (
+            <Link
               key={label}
-              type="button"
-              onClick={action || (() => navigate(to))}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[10px] font-semibold ${
-                label === 'Submitted Reports'
+              to={to}
+              state={state}
+              aria-current={activeTab === label ? 'page' : undefined}
+              className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-[10px] font-semibold ${
+                activeTab === label
                   ? 'bg-emerald-600 text-white'
                   : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
               {label}
-            </button>
+            </Link>
           ))}
         </nav>
       </header>
 
       <main className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-7">
-        <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <section>
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
               Resident Portal
@@ -555,14 +565,6 @@ export default function SubmittedReports() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={openCreateForm}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-900/30 transition hover:bg-emerald-500"
-          >
-            <PlusCircle className="h-4 w-4" />
-            Create New Report
-          </button>
         </section>
 
         {successMessage && (

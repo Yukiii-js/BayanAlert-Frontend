@@ -89,8 +89,18 @@ export const api = {
   //add
   getBarangays: () => request('/barangays'),
   register: (data) =>request('/auth/register', {method: 'POST',body: data,}),
+  sendRegistrationVerification: (email) => request('/auth/send-registration-verification', {
+    method: 'POST',
+    body: { email },
+  }),
+  verifyEmail: (token) => request('/auth/verify-email', { method: 'POST', body: { token } }),
+  resendVerificationEmail: (email) => request('/auth/resend-verification', {
+    method: 'POST',
+    body: { email },
+  }),
   getCommunityDashboard: () => request('/reports/community'),
   getHazardMap: () => request('/map/reports'),
+  getCalapanWeather: () => request('/weather/calapan'),
   getResidentReports: () => request('/reports'),
   getReportCategories: () => request('/hazard-categories'),
   createResidentReport: (data) => request('/reports', { method: 'POST', body: data }),

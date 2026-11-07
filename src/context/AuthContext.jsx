@@ -3,6 +3,11 @@ import { api } from '../api/client';
 
 const AuthContext = createContext(null);
 const SESSION_ROLE_KEY = 'bayanalert_session_role';
+const REPORT_PROMPT_SEEN_KEY = 'bayanalert_resident_report_prompt_seen';
+const WEATHER_SESSION_KEYS = [
+  'bayanalert_calapan_weather_signature',
+  'bayanalert_calapan_weather_advisory_shown',
+];
 
 function accountType(user) {
   const roleName = String(user?.role_name || '').trim().toLowerCase();
@@ -121,6 +126,8 @@ export function AuthProvider({ children }) {
       localStorage.setItem('bayanalert_token', res.data.token);
       localStorage.setItem('bayanalert_user', JSON.stringify(res.data.user));
       localStorage.setItem(SESSION_ROLE_KEY, userType);
+      localStorage.removeItem(REPORT_PROMPT_SEEN_KEY);
+      WEATHER_SESSION_KEYS.forEach((key) => sessionStorage.removeItem(key));
       setUser(res.data.user);
       return res.data.user;
     }
@@ -136,6 +143,8 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('bayanalert_token');
       localStorage.removeItem('bayanalert_user');
       localStorage.removeItem(SESSION_ROLE_KEY);
+      localStorage.removeItem(REPORT_PROMPT_SEEN_KEY);
+      WEATHER_SESSION_KEYS.forEach((key) => sessionStorage.removeItem(key));
       setUser(null);
     }
   };

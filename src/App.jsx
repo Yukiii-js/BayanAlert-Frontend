@@ -10,6 +10,7 @@ import { TableForm } from './pages/TableForm';
 import { Categories } from './pages/Categories';
 import { GuestHome } from './pages/GuestHome';
 import { Register } from './pages/Register';
+import { VerifyEmail } from './pages/VerifyEmail';
 import { ResidentLogin } from './pages/ResidentLogin';
 import SubmittedReports from './pages/SubmittedReports';
 import { Notifications } from './pages/Notifications';
@@ -32,6 +33,7 @@ export default function App() {
 
           {/* Public registration page */}
           <Route path="/register" element={<Register />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
 
           {/* Public resident login page */}
           <Route path="/resident-login" element={<ResidentLogin />} />

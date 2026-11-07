@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from '../components/BrandLogo';
+import { api } from '../api/client';
 
 export function ResidentLogin() {
   const [username, setUsername] = useState('');
@@ -20,6 +21,8 @@ export function ResidentLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -30,6 +33,7 @@ export function ResidentLogin() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setResendMessage('');
 
     if (!username.trim() || !password) {
       setError('Please enter your username or email and password.');
@@ -51,6 +55,25 @@ export function ResidentLogin() {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    const email = username.trim().toLowerCase();
+    if (!email.includes('@')) {
+      setResendMessage('Enter your registered email address in the username/email field above.');
+      return;
+    }
+
+    setIsResending(true);
+    setResendMessage('');
+    try {
+      const response = await api.resendVerificationEmail(email);
+      setResendMessage(response?.message || 'If eligible, a verification email has been sent.');
+    } catch (err) {
+      setResendMessage(err.message || 'Unable to send a verification email right now.');
+    } finally {
+      setIsResending(false);
     }
   }
 
@@ -192,6 +215,20 @@ export function ResidentLogin() {
               )}
             </button>
           </form>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={isResending}
+              className="text-xs font-semibold text-emerald-300 underline decoration-emerald-500/50 underline-offset-4 hover:text-emerald-200 disabled:opacity-60"
+            >
+              {isResending ? 'Sending...' : 'Resend verification email'}
+            </button>
+            {resendMessage && (
+              <p role="status" className="mt-2 text-xs text-slate-400">{resendMessage}</p>
+            )}
+          </div>
 
           <div className="mt-6 border-t border-slate-800 pt-5 text-center">
             <p className="text-sm text-slate-400">

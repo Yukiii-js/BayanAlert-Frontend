@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   User,
   Mail,
@@ -13,28 +13,99 @@ import {
   UserPlus,
   CheckCircle2,
   ArrowLeft,
+  Send,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { BrandLogo } from '../components/BrandLogo';
 
+const REGISTRATION_DRAFT_KEY = 'bayanalert_registration_draft';
+const EMPTY_FORM = {
+  full_name: '',
+  email: '',
+  username: '',
+  password: '',
+  confirm_password: '',
+  barangay_id: '',
+  address_details: '',
+};
+
+function readRegistrationDraft() {
+  try {
+    const rawDraft = sessionStorage.getItem(REGISTRATION_DRAFT_KEY);
+    if (!rawDraft) return EMPTY_FORM;
+
+    const draft = JSON.parse(rawDraft);
+    if (!draft?.form || Date.now() - draft.savedAt > 30 * 60 * 1000) {
+      sessionStorage.removeItem(REGISTRATION_DRAFT_KEY);
+      return EMPTY_FORM;
+    }
+
+    return { ...EMPTY_FORM, ...draft.form };
+  } catch {
+    sessionStorage.removeItem(REGISTRATION_DRAFT_KEY);
+    return EMPTY_FORM;
+  }
+}
+
 export function Register() {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [form, setForm] = useState({
-    full_name: '',
-    email: '',
-    username: '',
-    password: '',
-    confirm_password: '',
-    barangay_id: '',
-    address_details: '',
-  });
+  const [form, setForm] = useState(readRegistrationDraft);
 
   const [barangays, setBarangays] = useState([]);
   const [loadingBarangays, setLoadingBarangays] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [submittedEmail, setSubmittedEmail] = useState('');
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
+  const [verificationMessage, setVerificationMessage] = useState('');
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState('');
+  const [isSendingVerification, setIsSendingVerification] = useState(false);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search);
+      const result = params.get('email_verification');
+      if (result === 'verified') {
+        const verifiedEmail = params.get('email');
+        if (verifiedEmail && !form.email.trim()) {
+          setForm((previous) => ({ ...previous, email: verifiedEmail }));
+        }
+        setVerificationStatus('verified');
+        setVerificationEmail((verifiedEmail || form.email).trim().toLowerCase());
+        setVerificationMessage('Email verified successfully. You can continue creating your account.');
+      } else if (result === 'failed') {
+        setVerificationStatus('failed');
+        setVerificationEmail(form.email.trim().toLowerCase());
+        setVerificationMessage('Email verification failed. The link may be invalid or expired. Request a new one and try again.');
+      }
+
+      if (result) {
+        navigate('/register', { replace: true });
+      }
+    } catch (storageError) {
+      console.error('Could not restore email verification status.', storageError);
+    }
+  }, [form.email, location.search, navigate]);
+
+  useEffect(() => {
+    try {
+      if (Object.values(form).some(Boolean)) {
+        sessionStorage.setItem(
+          REGISTRATION_DRAFT_KEY,
+          JSON.stringify({ form, savedAt: Date.now() })
+        );
+      } else {
+        sessionStorage.removeItem(REGISTRATION_DRAFT_KEY);
+      }
+    } catch (storageError) {
+      console.error('Could not save the temporary registration draft.', storageError);
+    }
+  }, [form]);
 
   useEffect(() => {
     let mounted = true;
@@ -74,10 +145,52 @@ export function Register() {
   function handleChange(e) {
     const { name, value } = e.target;
 
+    if (name === 'email') {
+      setVerificationMessage('');
+      setVerificationEmail('');
+      setVerificationStatus('');
+    }
+
     setForm((previous) => ({
       ...previous,
       [name]: value,
     }));
+  }
+
+  async function handleVerifyEmail() {
+    const email = form.email.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Enter a valid email address before requesting verification.');
+      return;
+    }
+
+    setError('');
+    setIsSendingVerification(true);
+    setVerificationMessage('');
+    setVerificationEmail('');
+    setVerificationStatus('');
+    try {
+      sessionStorage.setItem(
+        REGISTRATION_DRAFT_KEY,
+        JSON.stringify({ form, savedAt: Date.now() })
+      );
+    } catch (storageError) {
+      console.error('Could not save the temporary registration draft.', storageError);
+    }
+    try {
+      const response = await api.sendRegistrationVerification(email);
+      setVerificationEmail(email);
+      setVerificationStatus('pending');
+      setVerificationMessage(
+        response?.message || 'Verification link sent. Open it from your inbox.'
+      );
+    } catch (err) {
+      setVerificationStatus('failed');
+      setVerificationEmail(email);
+      setVerificationMessage(err.message || 'Could not send a verification link.');
+    } finally {
+      setIsSendingVerification(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -103,24 +216,37 @@ export function Register() {
         barangay_id: Number(form.barangay_id),
       });
 
+      setSubmittedEmail(form.email.trim());
+      setResendMessage('');
       setSuccess(
         response?.message ||
-        'Registration successful. Your account is awaiting approval.'
+        'Registration successful. Check your email to verify your address.'
       );
 
-      setForm({
-        full_name: '',
-        email: '',
-        username: '',
-        password: '',
-        confirm_password: '',
-        barangay_id: '',
-        address_details: '',
-      });
+      setForm(EMPTY_FORM);
+      setVerificationMessage('');
+      setVerificationEmail('');
+      setVerificationStatus('');
+      sessionStorage.removeItem(REGISTRATION_DRAFT_KEY);
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    if (!submittedEmail) return;
+
+    setIsResending(true);
+    setResendMessage('');
+    try {
+      const response = await api.resendVerificationEmail(submittedEmail);
+      setResendMessage(response?.message || 'If eligible, a verification email has been sent.');
+    } catch (err) {
+      setResendMessage(err.message || 'Unable to send a verification email right now.');
+    } finally {
+      setIsResending(false);
     }
   }
 
@@ -172,8 +298,21 @@ export function Register() {
                 <p className="font-semibold">Registration submitted</p>
                 <p className="mt-1">{success}</p>
                 <p className="mt-2 text-xs text-slate-400">
-                  You can sign in after your account has been activated.
+                  Verify your email first. You can sign in after an administrator activates your account.
                 </p>
+                {submittedEmail && (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={isResending}
+                      className="text-xs font-semibold text-emerald-300 underline decoration-emerald-500/50 underline-offset-4 hover:text-emerald-200 disabled:opacity-60"
+                    >
+                      {isResending ? 'Sending...' : 'Resend verification email'}
+                    </button>
+                    {resendMessage && <p className="mt-2 text-xs text-slate-300">{resendMessage}</p>}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -205,21 +344,66 @@ export function Register() {
                 <label htmlFor="email" className={labelClass}>
                   Email Address *
                 </label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    maxLength={150}
-                    value={form.email}
-                    onChange={handleChange}
-                    placeholder="you@example.com"
-                    className={inputClass}
-                  />
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                    <input
+                      id="email"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      maxLength={150}
+                      value={form.email}
+                      onChange={handleChange}
+                      placeholder="you@example.com"
+                      className={inputClass}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleVerifyEmail}
+                    disabled={isSendingVerification || !form.email.trim() || (
+                      verificationStatus === 'verified'
+                      && verificationEmail === form.email.trim().toLowerCase()
+                    )}
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+                  >
+                    {verificationStatus === 'verified'
+                      && verificationEmail === form.email.trim().toLowerCase()
+                      ? <CheckCircle2 className="h-4 w-4" />
+                      : isSendingVerification
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Send className="h-4 w-4" />}
+                    <span>
+                      {verificationStatus === 'verified'
+                        && verificationEmail === form.email.trim().toLowerCase()
+                        ? 'Verified'
+                        : isSendingVerification ? 'Sending' : 'Verify'}
+                    </span>
+                  </button>
                 </div>
+                {verificationMessage && (
+                  <p
+                    role="status"
+                    className={`mt-2 text-xs ${
+                      verificationEmail !== form.email.trim().toLowerCase()
+                        ? 'text-slate-400'
+                        : verificationStatus === 'verified'
+                          ? 'text-emerald-300'
+                          : verificationStatus === 'failed'
+                            ? 'text-rose-300'
+                            : 'text-amber-300'
+                    }`}
+                  >
+                    {verificationStatus === 'verified' ? 'Verified: ' : ''}
+                    {verificationStatus === 'failed' ? 'Not verified: ' : ''}
+                    {verificationMessage}
+                  </p>
+                )}
+                <p className="mt-1 text-[11px] leading-4 text-slate-500">
+                  You may create your account before verifying, but email verification is required to sign in.
+                </p>
               </div>
 
               <div>

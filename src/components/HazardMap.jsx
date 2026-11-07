@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { AlertCircle, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
+import { getCalapanWeatherEffect } from './CalapanWeather';
 import 'leaflet/dist/leaflet.css';
 
 const CALAPAN_CENTER = [13.411, 121.18];
+const CALAPAN_BOUNDS = L.latLngBounds([13.25, 121.05], [13.55, 121.32]);
 const STATUS_COLORS = {
   verified: '#10b981',
   pending: '#f59e0b',
@@ -51,11 +53,13 @@ export function HazardMap({
   selectable = false,
   selectedLocation = null,
   onLocationSelect,
+  weather = null,
 }) {
   const mapElement = useRef(null);
   const mapInstance = useRef(null);
   const markerLayer = useRef(null);
   const selectionLayer = useRef(null);
+  const hasFittedReports = useRef(false);
   const [mapData, setMapData] = useState({ reports: [], categories: [], coordinates_available: false });
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -87,17 +91,37 @@ export function HazardMap({
   useEffect(() => {
     if (!mapElement.current || mapInstance.current) return undefined;
 
-    const map = L.map(mapElement.current, { scrollWheelZoom: false }).setView(CALAPAN_CENTER, 13);
+    const map = L.map(mapElement.current, {
+      scrollWheelZoom: false,
+      maxBounds: CALAPAN_BOUNDS,
+      maxBoundsViscosity: 1,
+      minZoom: 11,
+      maxZoom: 18,
+    }).fitBounds(CALAPAN_BOUNDS);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      subdomains: 'abcd',
+      subdomains: 'abc',
       maxZoom: 19,
+      keepBuffer: 2,
+      updateWhenIdle: true,
+      updateWhenZooming: false,
     }).addTo(map);
     markerLayer.current = L.layerGroup().addTo(map);
     selectionLayer.current = L.layerGroup().addTo(map);
     mapInstance.current = map;
 
+    let resizeFrame = 0;
+    const resizeObserver = new ResizeObserver(() => {
+      window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => {
+        map.invalidateSize({ pan: false });
+      });
+    });
+    resizeObserver.observe(mapElement.current);
+
     return () => {
+      resizeObserver.disconnect();
+      window.cancelAnimationFrame(resizeFrame);
       map.remove();
       mapInstance.current = null;
       markerLayer.current = null;
@@ -130,7 +154,8 @@ export function HazardMap({
 
     const latitude = Number(selectedLocation.latitude);
     const longitude = Number(selectedLocation.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+        !CALAPAN_BOUNDS.contains([latitude, longitude])) return;
 
     L.marker([latitude, longitude], { icon: markerIcon('verified') })
       .bindPopup('Selected report location')
@@ -155,7 +180,7 @@ export function HazardMap({
       const latitude = Number(report.latitude);
       const longitude = Number(report.longitude);
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
-          latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+          !CALAPAN_BOUNDS.contains([latitude, longitude])) {
         return;
       }
 
@@ -166,9 +191,10 @@ export function HazardMap({
         .addTo(layer);
     });
 
-    if (points.length > 0) {
+    if (points.length > 0 && !hasFittedReports.current) {
       map.fitBounds(points, { padding: [36, 36], maxZoom: 15 });
-    } else {
+      hasFittedReports.current = true;
+    } else if (points.length === 0 && !hasFittedReports.current) {
       map.setView(CALAPAN_CENTER, 13);
     }
   }, [visibleReports]);
@@ -178,6 +204,7 @@ export function HazardMap({
     ['pending', 'Pending'],
     ['disputed', 'Disputed'],
   ];
+  const weatherEffect = getCalapanWeatherEffect(weather);
 
   return (
     <section id={id} className={`overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 ${className}`}>
@@ -189,7 +216,7 @@ export function HazardMap({
           </h2>
           <p className="mt-2 text-xs text-slate-400">
             {selectable
-              ? 'Click the map to select the incident location and look up its address.'
+              ? 'Choose a location within Calapan City to look up its address.'
               : 'Calapan City, Oriental Mindoro · Live database locations'}
           </p>
         </div>
@@ -213,10 +240,28 @@ export function HazardMap({
         )}
       </div>
 
-      <div className="relative">
+      <div className="relative z-0 isolate">
         <div ref={mapElement} className={`hazard-leaflet-map ${height}`} />
+        {weatherEffect && (
+          <>
+            <div
+              aria-hidden="true"
+              className={`weather-map-effect weather-map-effect--${weatherEffect}`}
+            />
+            <div
+              title={`Live weather: ${weather?.current?.condition?.text || weatherEffect.replace('-', ' ')}${weather?.current?.wind_kph >= 35 ? ` · ${Math.round(weather.current.wind_kph)} km/h wind` : ''}`}
+              className="pointer-events-none absolute right-3 top-3 z-[500] flex max-w-[calc(100%-3.5rem)] items-center gap-1.5 rounded-full border border-white/20 bg-slate-950/90 px-3 py-1.5 text-[10px] font-semibold text-white shadow-lg backdrop-blur-sm sm:max-w-[min(18rem,calc(100%-3.5rem))]"
+            >
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-sky-300" />
+              <span className="min-w-0 truncate">
+                Live weather: {weather?.current?.condition?.text || weatherEffect.replace('-', ' ')}
+                {weather?.current?.wind_kph >= 35 && ` · ${Math.round(weather.current.wind_kph)} km/h wind`}
+              </span>
+            </div>
+          </>
+        )}
         {!selectable && (
-          <div className="pointer-events-none absolute right-3 top-3 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl sm:right-5 sm:top-5">
+          <div className={`pointer-events-none absolute right-3 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl sm:right-5 ${weatherEffect ? 'top-16' : 'top-3'}`}>
             <p className="mb-2 text-xs font-bold text-white">Map Legend</p>
             <div className="space-y-2 text-[10px] text-slate-300">
               {statusLegend.map(([status, label]) => (
@@ -229,7 +274,7 @@ export function HazardMap({
           </div>
         )}
         {!selectable && (
-          <div className="absolute bottom-3 left-3 z-[500] rounded-lg border border-slate-700 bg-slate-950/90 px-3 py-2 text-[10px] text-slate-300">
+          <div className="absolute bottom-10 left-3 z-[500] rounded-lg border border-slate-700 bg-slate-950/90 px-3 py-2 text-[10px] text-slate-300 sm:bottom-3">
             <MapPin className="mr-1 inline h-3.5 w-3.5 text-emerald-400" />
             {visibleReports.length} mapped {visibleReports.length === 1 ? 'report' : 'reports'}
           </div>
@@ -241,7 +286,7 @@ export function HazardMap({
           </div>
         )}
         {!loading && !error && visibleReports.length === 0 && (
-          <div className="absolute bottom-14 left-1/2 z-[500] w-[min(90%,24rem)] -translate-x-1/2 rounded-xl border border-slate-700 bg-slate-950/95 p-4 text-center shadow-xl">
+          <div className="absolute bottom-20 left-1/2 z-[500] w-[min(90%,24rem)] -translate-x-1/2 rounded-xl border border-slate-700 bg-slate-950/95 p-4 text-center shadow-xl sm:bottom-14">
             <p className="text-sm font-semibold text-slate-200">
               {mapData.coordinates_available ? 'No mapped hazard reports yet' : 'Map locations need database setup'}
             </p>
@@ -253,7 +298,7 @@ export function HazardMap({
           </div>
         )}
         {!loading && error && (
-          <div className="absolute bottom-14 left-1/2 z-[600] w-[min(90%,24rem)] -translate-x-1/2 rounded-xl border border-rose-500/30 bg-slate-950/95 p-4 text-center shadow-xl">
+          <div className="absolute bottom-20 left-1/2 z-[600] w-[min(90%,24rem)] -translate-x-1/2 rounded-xl border border-rose-500/30 bg-slate-950/95 p-4 text-center shadow-xl sm:bottom-14">
             <p className="flex items-center justify-center gap-2 text-sm font-semibold text-rose-300">
               <AlertCircle className="h-4 w-4" /> Map data unavailable
             </p>
