@@ -11,7 +11,7 @@ const WEATHER_SESSION_KEYS = [
 
 function accountType(user) {
   const roleName = String(user?.role_name || '').trim().toLowerCase();
-  if (roleName === 'admin' || String(user?.role_id) === '1') return 'admin';
+  if (roleName === 'admin') return 'admin';
   if (roleName === 'resident' || roleName === 'user') return 'resident';
   return null;
 }
@@ -113,7 +113,7 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const res = await api.login({ username, password });
+    const res = await api.login({ username, password }, targetType);
     if (res?.data?.token) {
       const userType = accountType(res.data.user);
       if (userType !== targetType) {

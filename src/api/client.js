@@ -60,7 +60,10 @@ export async function request(endpoint, options = {}) {
 
 export const api = {
   // Auth
-  login: (credentials) => request('/auth/login', { method: 'POST', body: credentials }),
+  login: (credentials, expectedRole) => request('/auth/login', {
+    method: 'POST',
+    body: { ...credentials, expected_role: expectedRole },
+  }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   getMe: () => request('/auth/me'),
 

@@ -67,7 +67,7 @@ export default function App() {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute allowedRoles={['admin', 1]}>
+              <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <Dashboard />
                 </Layout>
@@ -78,7 +78,7 @@ export default function App() {
           <Route
             path="/admin/notifications"
             element={
-              <ProtectedRoute allowedRoles={['admin', 1]}>
+              <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <Notifications />
                 </Layout>
@@ -89,7 +89,7 @@ export default function App() {
           <Route
             path="/admin/reports"
             element={
-              <ProtectedRoute allowedRoles={['admin', 1]}>
+              <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <Suspense fallback={<p role="status" className="text-sm text-slate-400">Loading report tools...</p>}>
                     <PdfReports />
@@ -102,7 +102,7 @@ export default function App() {
           <Route
             path="/admin/tables/:table"
             element={
-              <ProtectedRoute allowedRoles={['admin', 1]}>
+              <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <TableList />
                 </Layout>
@@ -113,7 +113,7 @@ export default function App() {
           <Route
             path="/admin/tables/:table/create"
             element={
-              <ProtectedRoute allowedRoles={['admin', 1]}>
+              <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <TableForm />
                 </Layout>
@@ -124,7 +124,7 @@ export default function App() {
           <Route
             path="/admin/tables/:table/edit/:id"
             element={
-              <ProtectedRoute allowedRoles={['admin', 1]}>
+              <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <TableForm />
                 </Layout>
@@ -135,7 +135,7 @@ export default function App() {
           <Route
             path="/categories"
             element={
-              <ProtectedRoute allowedRoles={['admin', 1]}>
+              <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <Categories />
                 </Layout>

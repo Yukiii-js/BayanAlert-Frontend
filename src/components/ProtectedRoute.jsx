@@ -25,16 +25,11 @@ export function ProtectedRoute({ children, allowedRoles = [] }) {
   }
 
   if (allowedRoles.length) {
-    const userRoleId = normalizeRole(user?.role_id);
     const userRoleName = normalizeRole(user?.role_name);
-    const allowed = allowedRoles.some((role) => {
-      const normalizedRole = normalizeRole(role);
-      return normalizedRole === userRoleId || normalizedRole === userRoleName;
-    });
+    const allowed = allowedRoles.some((role) => normalizeRole(role) === userRoleName);
 
     if (!allowed) {
-      const fallback =
-        userRoleId === '1' || userRoleName === 'admin' ? '/admin' : '/resident';
+      const fallback = userRoleName === 'admin' ? '/admin' : '/resident';
       return <Navigate to={fallback} replace />;
     }
   }
