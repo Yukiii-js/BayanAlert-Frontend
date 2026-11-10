@@ -133,7 +133,8 @@ export function GuestHome() {
               </a>
 
               <Link
-                to="/login"
+                to="/resident-login"
+                onClick={() => setMobileMenuOpen(false)}
                 className="rounded-lg px-4 py-3 text-sm text-slate-300 hover:bg-slate-800"
               >
                 Login
