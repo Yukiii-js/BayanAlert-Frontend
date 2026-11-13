@@ -61,6 +61,13 @@ export function HazardMap({
   const selectionLayer = useRef(null);
   const hasFittedReports = useRef(false);
   const [mapData, setMapData] = useState({ reports: [], categories: [], coordinates_available: false });
+  const [externalFeed, setExternalFeed] = useState({ events: [], layers: {}, summary: { total: 0 } });
+  const [externalLayerState, setExternalLayerState] = useState({
+    usgs: true,
+    gdacs: true,
+    hdx: true,
+  });
+  const [externalLayersOpen, setExternalLayersOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -86,6 +93,26 @@ export function HazardMap({
     loadMapData();
     const timer = window.setInterval(loadMapData, 60000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadExternalFeed() {
+      try {
+        const payload = await api.getExternalResidentFeed();
+        if (!isMounted) return;
+        setExternalFeed(payload?.data || { events: [], layers: {}, summary: { total: 0 } });
+      } catch (feedError) {
+        if (!isMounted) return;
+        setExternalFeed({ events: [], layers: {}, summary: { total: 0 } });
+      }
+    }
+
+    loadExternalFeed();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -191,13 +218,47 @@ export function HazardMap({
         .addTo(layer);
     });
 
+    if (externalLayerState.usgs || externalLayerState.gdacs) {
+      (externalFeed.events || []).forEach((event) => {
+        const latitude = Number(event.latitude);
+        const longitude = Number(event.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !CALAPAN_BOUNDS.contains([latitude, longitude])) {
+          return;
+        }
+
+        const source = String(event.source || '').toLowerCase();
+        if ((source === 'usgs' && !externalLayerState.usgs) || (source === 'gdacs' && !externalLayerState.gdacs)) {
+          return;
+        }
+
+        const color = source === 'usgs' ? '#38bdf8' : '#f59e0b';
+        const marker = L.circleMarker([latitude, longitude], {
+          radius: 8 + Number(event.magnitude_or_score || 1) * 1.2,
+          color,
+          fillColor: color,
+          fillOpacity: 0.7,
+          weight: 2,
+        });
+
+        marker.bindPopup(`
+          <div class="hazard-map-popup">
+            <strong>${event.title || 'External hazard alert'}</strong>
+            <div>${event.source || 'External'} · ${event.hazard_type || 'Alert'}</div>
+            <div>Magnitude: ${event.magnitude_or_score ?? 'N/A'}</div>
+            <div>Distance: ${event.distance_to_municipality_km ?? 'N/A'} km</div>
+          </div>
+        `);
+        marker.addTo(layer);
+      });
+    }
+
     if (points.length > 0 && !hasFittedReports.current) {
       map.fitBounds(points, { padding: [36, 36], maxZoom: 15 });
       hasFittedReports.current = true;
     } else if (points.length === 0 && !hasFittedReports.current) {
       map.setView(CALAPAN_CENTER, 13);
     }
-  }, [visibleReports]);
+  }, [visibleReports, externalFeed, externalLayerState]);
 
   const statusLegend = [
     ['verified', 'Verified'],
@@ -205,6 +266,7 @@ export function HazardMap({
     ['disputed', 'Disputed'],
   ];
   const weatherEffect = getCalapanWeatherEffect(weather);
+  const externalToggleCount = Object.values(externalLayerState).filter(Boolean).length;
 
   return (
     <section id={id} className={`overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 ${className}`}>
@@ -261,7 +323,37 @@ export function HazardMap({
           </>
         )}
         {!selectable && (
-          <div className={`pointer-events-none absolute right-3 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl sm:right-5 ${weatherEffect ? 'top-16' : 'top-3'}`}>
+          <div className="absolute right-3 top-3 z-[500]">
+            <button
+              type="button"
+              onClick={() => setExternalLayersOpen((current) => !current)}
+              className="rounded-full border border-slate-700 bg-slate-950/95 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-200 shadow-lg backdrop-blur-sm"
+            >
+              Layers ({externalToggleCount})
+            </button>
+            {externalLayersOpen && (
+              <div className="mt-2 w-56 rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl">
+                {[
+                  ['usgs', 'USGS Seismic Epicenters'],
+                  ['gdacs', 'GDACS Regional Alerts'],
+                  ['hdx', 'HDX Barangay Boundaries & Exposure'],
+                ].map(([key, label]) => (
+                  <label key={key} className="mb-2 flex cursor-pointer items-center justify-between gap-3 text-[11px] text-slate-200 last:mb-0">
+                    <span>{label}</span>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(externalLayerState[key])}
+                      onChange={() => setExternalLayerState((current) => ({ ...current, [key]: !current[key] }))}
+                      className="h-4 w-4 accent-emerald-500"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {!selectable && (
+          <div className={`pointer-events-none absolute right-3 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl sm:right-5 ${weatherEffect ? 'top-16' : 'top-14'}`}>
             <p className="mb-2 text-xs font-bold text-white">Map Legend</p>
             <div className="space-y-2 text-[10px] text-slate-300">
               {statusLegend.map(([status, label]) => (
@@ -270,6 +362,12 @@ export function HazardMap({
                   {label}
                 </p>
               ))}
+              {(externalFeed.events || []).length > 0 && (
+                <p className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
+                  External hazard feed
+                </p>
+              )}
             </div>
           </div>
         )}
