@@ -49,16 +49,62 @@ function eventLocation(event) {
 function ProviderStatus({ provider }) {
   const status = String(provider?.status || 'unknown').toLowerCase();
   const isOnline = status === 'online' || status === 'success';
+  const isUnavailable = status === 'error' || status === 'offline';
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider ${
       isOnline
         ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-        : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+        : isUnavailable
+          ? 'border-rose-500/20 bg-rose-500/10 text-rose-300'
+          : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
     }`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-300'}`} />
-      {isOnline ? 'Feed connected' : 'Feed unavailable'}
+      <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : isUnavailable ? 'bg-rose-400' : 'bg-amber-300'}`} />
+      {isOnline ? 'Feed connected' : isUnavailable ? 'Feed unavailable' : 'Status unavailable'}
     </span>
   );
+}
+
+function publishedToResidents(event) {
+  if ([1, '1', true].includes(event.is_published_to_residents)) return true;
+  if ([0, '0', false].includes(event.is_published_to_residents)) return false;
+
+  const source = String(event.source || '').toLowerCase();
+  const distance = Number(event.distance_to_municipality_km);
+  const magnitude = Number(event.magnitude_or_score);
+  if (source === 'usgs') return distance <= 150 || magnitude >= 4.5;
+  if (source === 'gdacs') return distance <= 500;
+  return false;
+}
+
+function normalizeFeedResponse(response) {
+  const candidates = [
+    response?.data?.data,
+    response?.data?.feed,
+    response?.data,
+    response?.feed,
+    response,
+  ];
+  const data = candidates.find((candidate) => (
+    candidate && typeof candidate === 'object' &&
+    (Array.isArray(candidate.events) || Array.isArray(candidate.usgs) || Array.isArray(candidate.gdacs))
+  ));
+
+  if (!data) {
+    throw new Error('The regional advisory endpoint did not return event data. Confirm the latest backend is running.');
+  }
+
+  const events = Array.isArray(data.events)
+    ? data.events
+    : [
+        ...(Array.isArray(data.usgs) ? data.usgs.map((event) => ({ ...event, source: event.source || 'USGS' })) : []),
+        ...(Array.isArray(data.gdacs) ? data.gdacs.map((event) => ({ ...event, source: event.source || 'GDACS' })) : []),
+      ];
+
+  return {
+    ...data,
+    events,
+    providers: data.providers || {},
+  };
 }
 
 function EventCard({ event, source }) {
@@ -106,7 +152,7 @@ function EventCard({ event, source }) {
             {location && <span>{location}</span>}
           </div>
         </div>
-        {event.event_url && (
+        {typeof event.event_url === 'string' && /^https?:\/\//i.test(event.event_url) && (
           <a
             href={event.event_url}
             target="_blank"
@@ -169,10 +215,7 @@ export function ExternalAdvisories() {
 
     try {
       const response = await api.getExternalResidentFeed();
-      const data = response?.data;
-      if (!data || !Array.isArray(data.events) || !data.providers) {
-        throw new Error('The regional advisory feed returned an invalid response.');
-      }
+      const data = normalizeFeedResponse(response);
       setFeed(data);
       setLastUpdated(new Date());
       setError('');
@@ -195,11 +238,11 @@ export function ExternalAdvisories() {
   const events = useMemo(
     () => (feed?.events || [])
       .filter((event) => String(event.source || '').toLowerCase() === activeSource)
-      .filter((event) => [1, '1', true].includes(event.is_published_to_residents)),
+    .filter(publishedToResidents),
     [feed, activeSource]
   );
   const alertCount = useMemo(
-    () => (feed?.events || []).filter((event) => [1, '1', true].includes(event.is_published_to_residents)).length,
+    () => (feed?.events || []).filter(publishedToResidents).length,
     [feed]
   );
   const Icon = source.icon;
@@ -239,7 +282,7 @@ export function ExternalAdvisories() {
             const ItemIcon = item.icon;
             const count = (feed?.events || []).filter((event) => (
               String(event.source || '').toLowerCase() === item.id &&
-              [1, '1', true].includes(event.is_published_to_residents)
+              publishedToResidents(event)
             )).length;
             const itemProvider = feed?.providers?.[item.id];
             const selected = activeSource === item.id;
@@ -315,7 +358,7 @@ export function ExternalAdvisories() {
           <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-10 text-center">
             <Icon className="mx-auto h-7 w-7 text-slate-600" />
             <p className="mt-3 text-sm font-semibold text-slate-300">
-              {provider?.status === 'error' ? 'Advisories unavailable' : `No published ${source.source} advisories`}
+              {provider?.status === 'error' ? 'Advisories unavailable' : `No qualifying ${source.source} advisories`}
             </p>
             <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-slate-500">
               {provider?.status === 'error'

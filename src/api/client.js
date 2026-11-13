@@ -36,7 +36,15 @@ export async function request(endpoint, options = {}) {
 
   try {
     const response = await fetch(url, config);
-    const data = await response.json().catch(() => null);
+    const responseText = await response.text();
+    let data;
+    try {
+      data = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      if (response.ok) {
+        throw new Error(`The API returned an invalid JSON response (HTTP ${response.status}).`);
+      }
+    }
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -50,6 +58,10 @@ export async function request(endpoint, options = {}) {
       }
       const message = data?.message || data?.error || `Request failed with status ${response.status}`;
       throw new Error(message);
+    }
+
+    if (data === null) {
+      throw new Error('The API returned an empty response.');
     }
 
     return data;
