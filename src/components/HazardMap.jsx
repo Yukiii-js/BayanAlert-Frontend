@@ -61,10 +61,7 @@ export function HazardMap({
   const selectionLayer = useRef(null);
   const hasFittedReports = useRef(false);
   const [mapData, setMapData] = useState({ reports: [], categories: [], coordinates_available: false });
-  const [externalFeed, setExternalFeed] = useState({ events: [], layers: {}, summary: { total: 0 } });
   const [externalLayerState, setExternalLayerState] = useState({
-    usgs: true,
-    gdacs: true,
     hdx: true,
   });
   const [externalLayersOpen, setExternalLayersOpen] = useState(false);
@@ -93,26 +90,6 @@ export function HazardMap({
     loadMapData();
     const timer = window.setInterval(loadMapData, 60000);
     return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadExternalFeed() {
-      try {
-        const payload = await api.getExternalResidentFeed();
-        if (!isMounted) return;
-        setExternalFeed(payload?.data || { events: [], layers: {}, summary: { total: 0 } });
-      } catch (feedError) {
-        if (!isMounted) return;
-        setExternalFeed({ events: [], layers: {}, summary: { total: 0 } });
-      }
-    }
-
-    loadExternalFeed();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   useEffect(() => {
@@ -218,47 +195,13 @@ export function HazardMap({
         .addTo(layer);
     });
 
-    if (externalLayerState.usgs || externalLayerState.gdacs) {
-      (externalFeed.events || []).forEach((event) => {
-        const latitude = Number(event.latitude);
-        const longitude = Number(event.longitude);
-        if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !CALAPAN_BOUNDS.contains([latitude, longitude])) {
-          return;
-        }
-
-        const source = String(event.source || '').toLowerCase();
-        if ((source === 'usgs' && !externalLayerState.usgs) || (source === 'gdacs' && !externalLayerState.gdacs)) {
-          return;
-        }
-
-        const color = source === 'usgs' ? '#38bdf8' : '#f59e0b';
-        const marker = L.circleMarker([latitude, longitude], {
-          radius: 8 + Number(event.magnitude_or_score || 1) * 1.2,
-          color,
-          fillColor: color,
-          fillOpacity: 0.7,
-          weight: 2,
-        });
-
-        marker.bindPopup(`
-          <div class="hazard-map-popup">
-            <strong>${event.title || 'External hazard alert'}</strong>
-            <div>${event.source || 'External'} · ${event.hazard_type || 'Alert'}</div>
-            <div>Magnitude: ${event.magnitude_or_score ?? 'N/A'}</div>
-            <div>Distance: ${event.distance_to_municipality_km ?? 'N/A'} km</div>
-          </div>
-        `);
-        marker.addTo(layer);
-      });
-    }
-
     if (points.length > 0 && !hasFittedReports.current) {
       map.fitBounds(points, { padding: [36, 36], maxZoom: 15 });
       hasFittedReports.current = true;
     } else if (points.length === 0 && !hasFittedReports.current) {
       map.setView(CALAPAN_CENTER, 13);
     }
-  }, [visibleReports, externalFeed, externalLayerState]);
+  }, [visibleReports]);
 
   const statusLegend = [
     ['verified', 'Verified'],
@@ -334,8 +277,6 @@ export function HazardMap({
             {externalLayersOpen && (
               <div className="mt-2 w-56 rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl">
                 {[
-                  ['usgs', 'USGS Seismic Epicenters'],
-                  ['gdacs', 'GDACS Regional Alerts'],
                   ['hdx', 'HDX Barangay Boundaries & Exposure'],
                 ].map(([key, label]) => (
                   <label key={key} className="mb-2 flex cursor-pointer items-center justify-between gap-3 text-[11px] text-slate-200 last:mb-0">
@@ -362,12 +303,6 @@ export function HazardMap({
                   {label}
                 </p>
               ))}
-              {(externalFeed.events || []).length > 0 && (
-                <p className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
-                  External hazard feed
-                </p>
-              )}
             </div>
           </div>
         )}

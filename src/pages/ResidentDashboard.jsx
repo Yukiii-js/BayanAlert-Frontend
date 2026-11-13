@@ -13,6 +13,7 @@ import {
   LogOut,
   MapPin,
   PlusCircle,
+  Radio,
   RefreshCw,
   ShieldAlert,
   ThumbsDown,
@@ -24,6 +25,7 @@ import { useAuth } from '../context/AuthContext';
 import { api, publicFileUrl } from '../api/client';
 import { HazardMap } from '../components/HazardMap';
 import { CalapanWeather } from '../components/CalapanWeather';
+import { ExternalAdvisories } from '../components/ExternalAdvisories';
 import { BrandLogo } from '../components/BrandLogo';
 
 const EMPTY_DASHBOARD = {
@@ -340,6 +342,7 @@ export function ResidentDashboard() {
   const navItems = [
     { label: 'Dashboard', id: 'dashboard', icon: Activity },
     { label: 'Incident Feed', id: 'incident-feed', icon: FileWarning },
+    { label: 'Regional Advisories', id: 'regional-advisories', icon: Radio },
     { label: 'Alerts', id: 'alerts', icon: Bell },
   ];
 
@@ -628,6 +631,8 @@ export function ResidentDashboard() {
               reminderEnabled={!showReportPrompt}
             />
           </div>
+
+          <ExternalAdvisories />
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 xl:col-span-2">
