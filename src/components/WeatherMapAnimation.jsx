@@ -50,9 +50,8 @@ function animationForEffect(effect) {
   return 'cloud';
 }
 
-function getVisibleBounds(map) {
+function getVisibleBounds(map, maximum) {
   const visible = map.getBounds();
-  const maximum = map.getMaxBounds();
   const south = Math.max(visible.getSouth(), maximum.getSouth());
   const north = Math.min(visible.getNorth(), maximum.getNorth());
   const west = Math.max(visible.getWest(), maximum.getWest());
@@ -92,7 +91,7 @@ function copyAnimationData(animation) {
   return JSON.parse(JSON.stringify(animation));
 }
 
-export default function WeatherMapAnimation({ map, weather }) {
+export default function WeatherMapAnimation({ map, maxBounds, weather }) {
   const effect = getCalapanWeatherEffect(weather);
   const animationName = animationForEffect(effect);
   const animationData = WEATHER_ANIMATIONS[animationName];
@@ -101,12 +100,13 @@ export default function WeatherMapAnimation({ map, weather }) {
 
   useEffect(() => {
     if (!map || !hasCurrentWeather || !animationData) return undefined;
+    if (!maxBounds) throw new Error('The Leaflet weather animation bounds are missing.');
 
     const pane = map.getPane('weatherAnimationPane');
     if (!pane) throw new Error('The Leaflet weather animation pane is missing.');
 
     const layer = L.layerGroup().addTo(map);
-    let bounds = getVisibleBounds(map);
+    let bounds = getVisibleBounds(map, maxBounds);
     const windFlow = Number.isFinite(windBearing) ? windBearing + 180 : 180;
     const windRadians = (windFlow * Math.PI) / 180;
     const eastDirection = Math.sin(windRadians);
@@ -157,7 +157,7 @@ export default function WeatherMapAnimation({ map, weather }) {
     });
 
     function updateBounds() {
-      bounds = getVisibleBounds(map);
+      bounds = getVisibleBounds(map, maxBounds);
       particles.forEach((particle) => setParticlePosition(particle, bounds));
     }
 
@@ -185,7 +185,7 @@ export default function WeatherMapAnimation({ map, weather }) {
       animations.forEach((animation) => animation.destroy());
       layer.remove();
     };
-  }, [map, animationData, hasCurrentWeather, windBearing]);
+  }, [map, maxBounds, animationData, hasCurrentWeather, windBearing]);
 
   return null;
 }

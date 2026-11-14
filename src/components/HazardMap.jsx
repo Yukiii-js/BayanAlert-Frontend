@@ -258,7 +258,11 @@ export function HazardMap({
         <div ref={mapElement} className={`hazard-leaflet-map ${height}`} />
         {!selectable && mapReady && externalLayerState.weather && weather?.current && (
           <Suspense fallback={null}>
-            <WeatherMapAnimation map={mapInstance.current} weather={weather} />
+            <WeatherMapAnimation
+              map={mapInstance.current}
+              maxBounds={CALAPAN_BOUNDS}
+              weather={weather}
+            />
           </Suspense>
         )}
         {!selectable && (
