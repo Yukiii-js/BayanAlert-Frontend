@@ -450,11 +450,14 @@ export function getCalapanWeatherEffect(weather) {
   const code = Number(current.condition?.code);
   const text = String(current.condition?.text || '').toLowerCase();
   if (STORM_CODES.has(code) || text.includes('thunder')) return 'storm';
-  if (RAIN_CODES.has(code) || Number(current.precip_mm) > 0 || text.includes('rain')) {
+  if (RAIN_CODES.has(code) || Number(current.precip_mm) > 0 ||
+      text.includes('rain') || text.includes('drizzle') || text.includes('shower')) {
     return Number(current.wind_kph) >= 35 ? 'rain-wind' : 'rain';
   }
-  if (Number(current.wind_kph) >= 35) return 'wind';
-  if (Number(current.is_day) === 1 && (text.includes('sun') || text.includes('clear'))) return 'sun';
-  if (text.includes('cloud') || text.includes('overcast')) return 'cloud';
+  if (Number(current.wind_kph) >= 35 || text.includes('wind') || text.includes('breezy')) return 'wind';
+  if (text.includes('sun') || text.includes('clear')) return 'sun';
+  if (text.includes('cloud') || text.includes('overcast') || text.includes('fog') || text.includes('mist')) {
+    return 'cloud';
+  }
   return '';
 }

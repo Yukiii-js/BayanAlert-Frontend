@@ -65,124 +65,44 @@ body {
   font-size: 13px;
 }
 
-.weather-map-effect {
-  position: absolute;
-  z-index: 400;
-  inset: 0;
-  overflow: hidden;
+.weather-lottie-marker {
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  pointer-events: none !important;
+}
+
+.weather-lottie-marker__float {
+  display: block;
+  width: 100%;
+  height: 100%;
+  animation: weather-marker-float 6.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.weather-lottie-marker__float--slow {
+  animation-duration: 8s;
+}
+
+.weather-lottie-marker__animation,
+.weather-lottie-marker__animation svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
   pointer-events: none;
 }
 
-.weather-map-effect--rain,
-.weather-map-effect--storm,
-.weather-map-effect--rain-wind {
-  background-color: rgb(37 99 235 / 8%);
+.weather-lottie-marker__animation {
+  filter: drop-shadow(0 4px 10px rgb(0 0 0 / 45%));
 }
 
-.weather-map-effect--rain::after,
-.weather-map-effect--rain-wind::after,
-.weather-map-effect--storm::after {
-  position: absolute;
-  inset: -50%;
-  background-image:
-    repeating-linear-gradient(105deg, transparent 0 29px, rgb(219 234 254 / 58%) 30px 31px, transparent 33px 52px),
-    repeating-linear-gradient(105deg, transparent 0 48px, rgb(191 219 254 / 42%) 49px 50px, transparent 52px 83px);
-  background-size: 100% 100%;
-  content: '';
-  animation: weather-rain-drift 0.75s linear infinite;
-  will-change: transform;
-}
-
-.weather-map-effect--storm {
-  background-color: rgb(15 23 42 / 22%);
-  animation: weather-lightning 6s ease-in-out infinite;
-}
-
-.weather-map-effect--rain-wind {
-  background-image: linear-gradient(90deg, rgb(2 132 199 / 12%), transparent 55%);
-}
-
-.weather-map-effect--rain-wind::after {
-  animation-duration: 0.55s;
-}
-
-.weather-map-effect--wind::after {
-  position: absolute;
-  inset: -20% -100%;
-  background-image:
-    repeating-linear-gradient(0deg, transparent 0 34px, rgb(226 232 240 / 62%) 35px 36px, transparent 38px 70px),
-    repeating-linear-gradient(0deg, transparent 0 61px, rgb(186 230 253 / 42%) 62px 63px, transparent 65px 105px);
-  content: '';
-  animation: weather-wind-drift 1.2s linear infinite;
-  will-change: transform;
-}
-
-.weather-map-effect--wind {
-  background: linear-gradient(90deg, rgb(148 163 184 / 8%), transparent 70%);
-}
-
-.weather-map-effect--sun {
-  background:
-    radial-gradient(circle at 86% 12%, rgb(253 224 71 / 68%) 0 3%, rgb(251 191 36 / 32%) 4%, transparent 13%),
-    repeating-conic-gradient(from 0deg at 86% 12%, rgb(253 224 71 / 18%) 0deg 5deg, transparent 6deg 18deg),
-    linear-gradient(135deg, rgb(251 191 36 / 12%), transparent 65%);
-  animation: weather-sun-glow 4s ease-in-out infinite alternate;
-}
-
-.weather-map-effect--cloud {
-  background:
-    radial-gradient(ellipse at 20% 5%, rgb(148 163 184 / 32%), transparent 38%),
-    radial-gradient(ellipse at 75% 15%, rgb(203 213 225 / 24%), transparent 42%),
-    linear-gradient(rgb(71 85 105 / 16%), rgb(71 85 105 / 8%));
-  background-size: 150% 100%, 150% 100%, 100% 100%;
-  animation: weather-cloud-drift 18s ease-in-out infinite alternate;
-}
-
-.weather-map-animation-floater {
-  position: absolute;
-  aspect-ratio: 1;
-  pointer-events: none;
-  filter: drop-shadow(0 6px 16px rgb(15 23 42 / 20%));
-  animation: weather-map-float 8s ease-in-out infinite;
-  will-change: transform;
-}
-
-@keyframes weather-map-float {
+@keyframes weather-marker-float {
   0%, 100% { transform: translate3d(0, 0, 0); }
-  50% { transform: translate3d(0, -11px, 0); }
-}
-
-@keyframes weather-rain-drift {
-  from { transform: translate3d(24px, -36px, 0); }
-  to { transform: translate3d(-24px, 36px, 0); }
-}
-
-@keyframes weather-wind-drift {
-  from { transform: translate3d(8%, 0, 0); }
-  to { transform: translate3d(-8%, 0, 0); }
-}
-
-@keyframes weather-lightning {
-  0%, 78%, 82%, 100% { opacity: 1; }
-  79% { opacity: 0.42; }
-  80% { opacity: 0.95; }
-  81% { opacity: 0.55; }
-}
-
-@keyframes weather-sun-glow {
-  from { filter: brightness(0.9); }
-  to { filter: brightness(1.2); }
-}
-
-@keyframes weather-cloud-drift {
-  from { background-position: 0 0, 100% 0, 0 0; }
-  to { background-position: 100% 0, 0 0, 0 0; }
+  50% { transform: translate3d(0, -8px, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .weather-map-effect,
-  .weather-map-effect::after,
-  .weather-map-animation-floater,
+  .weather-lottie-marker__float,
   .weather-reminder {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

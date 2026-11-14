@@ -4,7 +4,7 @@ import { AlertCircle, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
 import 'leaflet/dist/leaflet.css';
 
-const WeatherMapForecast = lazy(() => import('./WeatherMapForecast'));
+const WeatherMapAnimation = lazy(() => import('./WeatherMapAnimation'));
 
 const CALAPAN_CENTER = [13.411, 121.18];
 const CALAPAN_BOUNDS = L.latLngBounds([13.25, 121.05], [13.55, 121.32]);
@@ -61,9 +61,11 @@ export function HazardMap({
   const markerLayer = useRef(null);
   const selectionLayer = useRef(null);
   const hasFittedReports = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
   const [mapData, setMapData] = useState({ reports: [], categories: [], coordinates_available: false });
   const [externalLayerState, setExternalLayerState] = useState({
     hdx: true,
+    weather: true,
   });
   const [externalLayersOpen, setExternalLayersOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -103,6 +105,9 @@ export function HazardMap({
       minZoom: 11,
       maxZoom: 18,
     }).fitBounds(CALAPAN_BOUNDS);
+    const weatherPane = map.createPane('weatherAnimationPane');
+    weatherPane.style.zIndex = '550';
+    weatherPane.style.pointerEvents = 'none';
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       subdomains: 'abc',
@@ -114,6 +119,7 @@ export function HazardMap({
     markerLayer.current = L.layerGroup().addTo(map);
     selectionLayer.current = L.layerGroup().addTo(map);
     mapInstance.current = map;
+    setMapReady(true);
 
     let resizeFrame = 0;
     const resizeObserver = new ResizeObserver(() => {
@@ -247,9 +253,9 @@ export function HazardMap({
 
       <div className="relative z-0 isolate">
         <div ref={mapElement} className={`hazard-leaflet-map ${height}`} />
-        {!selectable && (
+        {!selectable && mapReady && externalLayerState.weather && weather?.current && (
           <Suspense fallback={null}>
-            <WeatherMapForecast weather={weather} />
+            <WeatherMapAnimation map={mapInstance.current} weather={weather} />
           </Suspense>
         )}
         {!selectable && (
@@ -264,6 +270,7 @@ export function HazardMap({
             {externalLayersOpen && (
               <div className="mt-2 w-56 rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl">
                 {[
+                  ['weather', 'Live weather animation'],
                   ['hdx', 'HDX Barangay Boundaries & Exposure'],
                 ].map(([key, label]) => (
                   <label key={key} className="mb-2 flex cursor-pointer items-center justify-between gap-3 text-[11px] text-slate-200 last:mb-0">
