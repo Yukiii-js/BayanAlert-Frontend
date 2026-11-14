@@ -215,7 +215,10 @@ export function HazardMap({
     ['pending', 'Pending'],
     ['disputed', 'Disputed'],
   ];
-  const externalToggleCount = Object.values(externalLayerState).filter(Boolean).length;
+  const externalToggleCount = [
+    externalLayerState.hdx,
+    Boolean(weather?.current && externalLayerState.weather),
+  ].filter(Boolean).length;
 
   return (
     <section id={id} className={`overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 ${className}`}>
@@ -270,7 +273,7 @@ export function HazardMap({
             {externalLayersOpen && (
               <div className="mt-2 w-56 rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl">
                 {[
-                  ['weather', 'Live weather animation'],
+                  ...(weather?.current ? [['weather', 'Live weather animation']] : []),
                   ['hdx', 'HDX Barangay Boundaries & Exposure'],
                 ].map(([key, label]) => (
                   <label key={key} className="mb-2 flex cursor-pointer items-center justify-between gap-3 text-[11px] text-slate-200 last:mb-0">
