@@ -42,6 +42,9 @@ export async function request(endpoint, options = {}) {
       data = responseText ? JSON.parse(responseText) : null;
     } catch {
       if (response.ok) {
+        if (response.headers.get('content-type')?.includes('text/html')) {
+          throw new Error('The API URL returned a web page instead of JSON. Set VITE_API_URL to the deployed PHP backend API base (for example, https://your-backend.example/api), then rebuild and redeploy the frontend.');
+        }
         throw new Error(`The API returned an invalid JSON response (HTTP ${response.status}).`);
       }
     }

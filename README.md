@@ -16,13 +16,24 @@ Modern single-page application (SPA) frontend for **BayanAlert**, connecting to 
 npm install
 ```
 
-### 2. Configure Environment (Optional)
-If running the backend on a different port than `http://localhost:8000`:
-Create `.env` based on `.env.example`:
+### 2. Configure Environment
+For local development, the default Vite proxy forwards `/api` requests to
+`http://127.0.0.1:3000`. If the backend is elsewhere, create `.env` from
+`.env.example` and set:
+
 ```env
-VITE_API_URL=http://localhost:8000/api
+VITE_API_URL=http://127.0.0.1:3000/api
 ```
-*(By default in development, Vite proxies `/api` requests to `http://localhost:8000`)*
+
+For production, set `VITE_API_URL` in the frontend host's build environment to
+the public backend API base URL, such as `https://your-backend.example/api`.
+The URL must point to the PHP backend, not the frontend's static/SPA host. The
+value is embedded at build time, so rebuild and redeploy after changing it. The
+deployed endpoint `GET {VITE_API_URL}/external/resident-feed` must return JSON.
+USGS Earthquake and GDACS feeds are public and do not require API keys.
+
+Do not set a production frontend base URL unless the PHP backend is deployed and
+its route rewrites send `/api/*` requests through `public/index.php`.
 
 ### 3. Start Development Server
 ```bash
