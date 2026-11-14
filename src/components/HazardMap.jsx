@@ -295,7 +295,9 @@ export function HazardMap({
           </div>
         )}
         {!selectable && (
-          <div className="pointer-events-none absolute right-3 top-14 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl sm:right-5">
+          <div className={`pointer-events-none absolute right-3 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl transition-[top] duration-200 sm:right-5 ${
+            externalLayersOpen ? 'top-40' : 'top-14'
+          }`}>
             <p className="mb-2 text-xs font-bold text-white">Map Legend</p>
             <div className="space-y-2 text-[10px] text-slate-300">
               {statusLegend.map(([status, label]) => (

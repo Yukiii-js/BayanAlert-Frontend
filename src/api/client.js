@@ -4,8 +4,21 @@ export function publicFileUrl(filePath) {
   if (typeof filePath !== 'string' || !filePath.trim()) return '';
 
   const apiUrl = new URL(API_BASE_URL, window.location.origin);
+  const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const evidencePrefix = 'uploads/evidence/';
+  if (normalizedPath.startsWith(evidencePrefix)) {
+    const filename = normalizedPath.slice(evidencePrefix.length);
+    if (!filename || filename.includes('/')) return '';
+
+    const apiPath = apiUrl.pathname.replace(/\/+$/, '');
+    return new URL(
+      `${apiPath}/media/evidence/${encodeURIComponent(filename)}`,
+      apiUrl.origin
+    ).href;
+  }
+
   const publicBasePath = apiUrl.pathname.replace(/\/api\/?$/, '/');
-  const relativePath = filePath.replace(/^\/+/, '');
+  const relativePath = normalizedPath;
 
   return new URL(relativePath, `${apiUrl.origin}${publicBasePath}`).href;
 }
