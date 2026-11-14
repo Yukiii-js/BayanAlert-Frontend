@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
-  ShieldAlert,
   User,
   Lock,
   AlertCircle,
@@ -13,6 +12,8 @@ import {
   LogIn,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { BrandLogo } from '../components/BrandLogo';
+import { api } from '../api/client';
 
 export function ResidentLogin() {
   const [username, setUsername] = useState('');
@@ -20,8 +21,10 @@ export function ResidentLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
 
-  const { login, logout } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -30,6 +33,7 @@ export function ResidentLogin() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setResendMessage('');
 
     if (!username.trim() || !password) {
       setError('Please enter your username or email and password.');
@@ -39,15 +43,7 @@ export function ResidentLogin() {
     setIsSubmitting(true);
 
     try {
-      const user = await login(username.trim(), password);
-
-      // Prevent resident accounts from entering admin pages.
-      const roleName = String(user?.role_name || '').trim().toLowerCase();
-      if (roleName !== 'resident' && roleName !== 'user') {
-        await logout();
-        setError('This login is for resident accounts only.');
-        return;
-      }
+      const user = await login(username.trim(), password, 'resident');
 
       navigate(from.startsWith('/admin') ? '/resident' : from, {
         replace: true,
@@ -59,6 +55,25 @@ export function ResidentLogin() {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    const email = username.trim().toLowerCase();
+    if (!email.includes('@')) {
+      setResendMessage('Enter your registered email address in the username/email field above.');
+      return;
+    }
+
+    setIsResending(true);
+    setResendMessage('');
+    try {
+      const response = await api.resendVerificationEmail(email);
+      setResendMessage(response?.message || 'If eligible, a verification email has been sent.');
+    } catch (err) {
+      setResendMessage(err.message || 'Unable to send a verification email right now.');
+    } finally {
+      setIsResending(false);
     }
   }
 
@@ -82,8 +97,8 @@ export function ResidentLogin() {
 
         {/* Header */}
         <div className="mb-8 text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-xl shadow-emerald-500/20">
-            <ShieldAlert className="h-8 w-8" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+            <BrandLogo className="h-16 w-16" />
           </div>
 
           <h1 className="text-3xl font-extrabold tracking-tight text-white">
@@ -200,6 +215,20 @@ export function ResidentLogin() {
               )}
             </button>
           </form>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={isResending}
+              className="text-xs font-semibold text-emerald-300 underline decoration-emerald-500/50 underline-offset-4 hover:text-emerald-200 disabled:opacity-60"
+            >
+              {isResending ? 'Sending...' : 'Resend verification email'}
+            </button>
+            {resendMessage && (
+              <p role="status" className="mt-2 text-xs text-slate-400">{resendMessage}</p>
+            )}
+          </div>
 
           <div className="mt-6 border-t border-slate-800 pt-5 text-center">
             <p className="text-sm text-slate-400">

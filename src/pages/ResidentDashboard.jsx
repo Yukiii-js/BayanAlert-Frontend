@@ -1,22 +1,32 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
   AlertCircle,
   Bell,
+  Check,
   CheckCircle2,
   Clock3,
+  Eye,
   FileWarning,
   Loader2,
   LogOut,
   MapPin,
   PlusCircle,
+  Radio,
   RefreshCw,
   ShieldAlert,
+  ThumbsDown,
+  ThumbsUp,
   User,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../api/client';
+import { api, publicFileUrl } from '../api/client';
+import { HazardMap } from '../components/HazardMap';
+import { CalapanWeather } from '../components/CalapanWeather';
+import { ExternalAdvisories } from '../components/ExternalAdvisories';
+import { BrandLogo } from '../components/BrandLogo';
 
 const EMPTY_DASHBOARD = {
   reports: [],
@@ -25,6 +35,7 @@ const EMPTY_DASHBOARD = {
   barangay_counts: [],
   alerts: [],
 };
+const REPORT_PROMPT_SEEN_KEY = 'bayanalert_resident_report_prompt_seen';
 
 function formatStatus(status) {
   return String(status || 'unknown')
@@ -61,18 +72,130 @@ function StatusBadge({ status }) {
   );
 }
 
+function ResidentReportPrompt({ onDismiss }) {
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+      onClick={onDismiss}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="resident-report-prompt-title"
+        className="w-full max-w-md rounded-2xl border border-emerald-500/30 bg-slate-900 p-6 text-slate-100 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400">
+              Help keep Calapan safe
+            </p>
+            <h2 id="resident-report-prompt-title" className="mt-2 text-xl font-extrabold text-white">
+              Report a hazard in your community
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Share an incident with the response team. Reports can include a location and photo evidence.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Close submit report prompt"
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <Link
+          to="/resident/submitted-reports"
+          state={{ openCreateReport: true }}
+          onClick={onDismiss}
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-500"
+        >
+          <PlusCircle className="h-4 w-4" />
+          Submit Report
+        </Link>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="mt-2 w-full rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-400 transition hover:bg-slate-800 hover:text-white"
+        >
+          Explore dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EvidenceImage({ filePath, alt, className }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (!filePath || hasError) {
+    return (
+      <div className={`flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-center text-xs text-slate-500 ${className}`}>
+        Image preview unavailable
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={publicFileUrl(filePath)}
+      alt={alt}
+      loading="lazy"
+      onError={() => setHasError(true)}
+      className={className}
+    />
+  );
+}
+
+function isVideoEvidence(evidence) {
+  return evidence?.evidence_type === 'video' || /\.mp4(?:$|[?#])/i.test(evidence?.file_path || '');
+}
+
+function EvidencePreview({ evidence, alt, className }) {
+  const fileUrl = publicFileUrl(evidence?.file_path);
+  if (!fileUrl) return null;
+
+  if (isVideoEvidence(evidence)) {
+    return (
+      <video
+        controls
+        playsInline
+        preload="metadata"
+        aria-label={alt}
+        className={className}
+      >
+        <source src={fileUrl} type="video/mp4" />
+        Your browser does not support MP4 playback.
+      </video>
+    );
+  }
+
+  return <EvidenceImage filePath={evidence.file_path} alt={alt} className={className} />;
+}
+
 export function ResidentDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [dashboard, setDashboard] = useState(EMPTY_DASHBOARD);
+  const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [notificationError, setNotificationError] = useState('');
+  const [voteError, setVoteError] = useState('');
+  const [votingReportId, setVotingReportId] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [selectedReport, setSelectedReport] = useState(null);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [showReportPrompt, setShowReportPrompt] = useState(
+    () => localStorage.getItem(REPORT_PROMPT_SEEN_KEY) !== '1'
+  );
 
   async function loadDashboard(showLoader = true) {
     if (showLoader) setLoading(true);
@@ -103,6 +226,12 @@ export function ResidentDashboard() {
   }
 
   useEffect(() => {
+    if (showReportPrompt) {
+      localStorage.setItem(REPORT_PROMPT_SEEN_KEY, '1');
+    }
+  }, [showReportPrompt]);
+
+  useEffect(() => {
     loadDashboard();
     const timer = window.setInterval(() => loadDashboard(false), 60000);
     return () => window.clearInterval(timer);
@@ -118,12 +247,20 @@ export function ResidentDashboard() {
     [dashboard.status_counts]
   );
 
-  const filteredReports = useMemo(
+  const communityReports = useMemo(
     () => dashboard.reports.filter((report) => (
+      report.can_vote !== false && report.can_vote !== 0 && report.can_vote !== '0' &&
+      report.can_vote !== null
+    )),
+    [dashboard.reports]
+  );
+
+  const filteredReports = useMemo(
+    () => communityReports.filter((report) => (
       (statusFilter === 'all' || report.status === statusFilter) &&
       (categoryFilter === 'all' || String(report.category_id) === categoryFilter)
     )),
-    [dashboard.reports, statusFilter, categoryFilter]
+    [communityReports, statusFilter, categoryFilter]
   );
 
   const reportCount = dashboard.status_counts.reduce(
@@ -152,50 +289,153 @@ export function ResidentDashboard() {
     navigate('/resident-login', { replace: true });
   }
 
+  async function markAlertRead(alert) {
+    if ([1, '1', true].includes(alert.is_read)) return;
+    setNotificationError('');
+    try {
+      await api.markNotificationRead(alert.notification_id);
+      setDashboard((current) => ({
+        ...current,
+        alerts: current.alerts.map((item) => (
+          item.notification_id === alert.notification_id
+            ? { ...item, is_read: 1 }
+            : item
+        )),
+      }));
+    } catch (requestError) {
+      setNotificationError(requestError.message || 'Unable to mark this alert as read.');
+    }
+  }
+
+  async function handleReportVote(report, choice) {
+    setVoteError('');
+    setVotingReportId(report.report_id);
+
+    try {
+      const vote = report.my_vote === choice ? null : choice;
+      const response = await api.voteOnReport(report.report_id, vote);
+      const summary = response?.data;
+      if (!summary || summary.report_id !== report.report_id) {
+        throw new Error('The server returned an invalid vote response.');
+      }
+
+      setDashboard((current) => ({
+        ...current,
+        reports: current.reports.map((item) => (
+          item.report_id === report.report_id
+            ? {
+                ...item,
+                confirm_count: summary.confirm_count,
+                dispute_count: summary.dispute_count,
+                my_vote: summary.my_vote,
+              }
+            : item
+        )),
+      }));
+    } catch (requestError) {
+      setVoteError(requestError.message || 'Unable to save your vote.');
+    } finally {
+      setVotingReportId(null);
+    }
+  }
+
   const navItems = [
     { label: 'Dashboard', id: 'dashboard', icon: Activity },
     { label: 'Incident Feed', id: 'incident-feed', icon: FileWarning },
+    { label: 'Regional Advisories', id: 'regional-advisories', icon: Radio },
     { label: 'Alerts', id: 'alerts', icon: Bell },
   ];
 
+  useEffect(() => {
+    if (!hasLoaded) return undefined;
+    const sections = navItems
+      .map(({ id }) => document.getElementById(id))
+      .filter(Boolean);
+    if (!sections.length) return undefined;
+
+    function updateActiveSection() {
+      const headerHeight = document.querySelector('header')?.getBoundingClientRect().height || 0;
+      const activationLine = headerHeight + 20;
+      let currentSection = sections[0];
+
+      sections.forEach((section) => {
+        if (section.getBoundingClientRect().top <= activationLine) {
+          currentSection = section;
+        }
+      });
+
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+        currentSection = sections[sections.length - 1];
+      }
+
+      setActiveSection(currentSection.id);
+    }
+
+    window.addEventListener('scroll', updateActiveSection, { passive: true });
+    window.addEventListener('resize', updateActiveSection);
+    updateActiveSection();
+    return () => {
+      window.removeEventListener('scroll', updateActiveSection);
+      window.removeEventListener('resize', updateActiveSection);
+    };
+  }, [hasLoaded]);
+
+  useEffect(() => {
+    if (!hasLoaded || !location.hash) return;
+    const section = document.getElementById(location.hash.slice(1));
+    if (!section) return;
+    setActiveSection(section.id);
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [hasLoaded, location.hash]);
+
   if (loading && !hasLoaded) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-400">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-        <p className="text-sm">Loading live community data...</p>
-      </div>
+      <>
+        <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-400">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+          <p className="text-sm">Loading live community data...</p>
+        </div>
+        {showReportPrompt && (
+          <ResidentReportPrompt onDismiss={() => setShowReportPrompt(false)} />
+        )}
+      </>
     );
   }
 
   if (error && !hasLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-100">
-        <div className="w-full max-w-lg rounded-2xl border border-rose-500/20 bg-slate-900 p-6">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="h-6 w-6 text-rose-400" />
-            <h1 className="text-lg font-bold">Community data unavailable</h1>
+      <>
+        <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-100">
+          <div className="w-full max-w-lg rounded-2xl border border-rose-500/20 bg-slate-900 p-6">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-6 w-6 text-rose-400" />
+              <h1 className="text-lg font-bold">Community data unavailable</h1>
+            </div>
+            <p className="mt-3 text-sm text-slate-400">{error}</p>
+            <button
+              type="button"
+              onClick={() => loadDashboard()}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </button>
           </div>
-          <p className="mt-3 text-sm text-slate-400">{error}</p>
-          <button
-            type="button"
-            onClick={() => loadDashboard()}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Retry
-          </button>
         </div>
-      </div>
+        {showReportPrompt && (
+          <ResidentReportPrompt onDismiss={() => setShowReportPrompt(false)} />
+        )}
+      </>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 shadow-lg shadow-black/20 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-slate-700/80 bg-slate-900/80 shadow-lg shadow-black/20 backdrop-blur-xl">
         <div className="mx-auto flex min-h-[64px] max-w-[1500px] items-center justify-between gap-3 px-4 lg:px-7">
           <Link to="/resident" className="flex shrink-0 items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-lg shadow-emerald-900/30">
-              <ShieldAlert className="h-5 w-5" />
+            <span className="flex h-10 w-10 items-center justify-center">
+              <BrandLogo className="h-10 w-10" />
             </span>
             <span>
               <span className="block text-sm font-extrabold">BayanAlert</span>
@@ -205,8 +445,8 @@ export function ResidentDashboard() {
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-1 md:flex">
-            {navItems.map(({ label, id, icon: Icon }) => (
+          <nav className="hidden items-center gap-1 lg:flex">
+            {navItems.slice(0, 2).map(({ label, id, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
@@ -219,15 +459,46 @@ export function ResidentDashboard() {
               >
                 <Icon className="h-4 w-4" />
                 {label}
+                {id === 'alerts' && unreadAlerts > 0 && (
+                  <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    {unreadAlerts > 99 ? '99+' : unreadAlerts}
+                  </span>
+                )}
               </button>
             ))}
             <Link
               to="/resident/submitted-reports"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-400 transition hover:bg-slate-800 hover:text-white"
+              state={{ openCreateReport: true }}
+              aria-current={location.pathname === '/resident/submitted-reports' ? 'page' : undefined}
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                location.pathname === '/resident/submitted-reports'
+                  ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
             >
               <PlusCircle className="h-4 w-4" />
-              Submit Report
+              Submit Reports
             </Link>
+            {navItems.slice(2).map(({ label, id, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => scrollToSection(id)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                  activeSection === id
+                    ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+                {id === 'alerts' && unreadAlerts > 0 && (
+                  <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    {unreadAlerts > 99 ? '99+' : unreadAlerts}
+                  </span>
+                )}
+              </button>
+            ))}
           </nav>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -245,27 +516,56 @@ export function ResidentDashboard() {
             </button>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto border-t border-slate-800 px-3 py-2 md:hidden">
-          {navItems.map(({ label, id, icon: Icon }) => (
+        <nav className="grid grid-cols-2 gap-1 border-t border-slate-800 px-3 py-2 lg:hidden">
+          {navItems.slice(0, 2).map(({ label, id, icon: Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => scrollToSection(id)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold ${
+              className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold ${
                 activeSection === id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
               {label}
+              {id === 'alerts' && unreadAlerts > 0 && (
+                <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                  {unreadAlerts > 99 ? '99+' : unreadAlerts}
+                </span>
+              )}
             </button>
           ))}
           <Link
             to="/resident/submitted-reports"
-            className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold text-slate-400 hover:bg-slate-800"
+            state={{ openCreateReport: true }}
+            aria-current={location.pathname === '/resident/submitted-reports' ? 'page' : undefined}
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold ${
+              location.pathname === '/resident/submitted-reports'
+                ? 'bg-emerald-600 text-white'
+                : 'text-slate-400 hover:bg-slate-800'
+            }`}
           >
             <PlusCircle className="h-3.5 w-3.5" />
-            Submit
+            Submit Reports
           </Link>
+          {navItems.slice(2).map(({ label, id, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => scrollToSection(id)}
+              className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold ${
+                activeSection === id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+              {id === 'alerts' && unreadAlerts > 0 && (
+                <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                  {unreadAlerts > 99 ? '99+' : unreadAlerts}
+                </span>
+              )}
+            </button>
+          ))}
         </nav>
       </header>
 
@@ -323,6 +623,16 @@ export function ResidentDashboard() {
               </article>
             ))}
           </div>
+
+          <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,1fr)]">
+            <HazardMap className="min-w-0" height="h-[420px]" weather={weather} />
+            <CalapanWeather
+              onWeatherChange={setWeather}
+              reminderEnabled={!showReportPrompt}
+            />
+          </div>
+
+          <ExternalAdvisories />
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 xl:col-span-2">
@@ -436,10 +746,16 @@ export function ResidentDashboard() {
             </div>
           </div>
 
+          {voteError && (
+            <div role="alert" className="mt-4 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
+              {voteError}
+            </div>
+          )}
+
           <div className="space-y-3 pt-4">
             {filteredReports.map((report) => (
               <article key={report.report_id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-emerald-500/30">
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(17rem,auto)]">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-bold text-white">{report.title}</h3>
@@ -454,11 +770,79 @@ export function ResidentDashboard() {
                       <span>{report.category_name || 'Uncategorized'}</span>
                       <span className="font-mono">{report.reference_number}</span>
                     </div>
-                  </div>
-                  <span className="flex shrink-0 items-center gap-1.5 text-[10px] text-slate-500">
-                    <Clock3 className="h-3.5 w-3.5" />
-                    {formatDate(report.submitted_at)}
-                  </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReport(report)}
+                          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-300"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          View details
+                        </button>
+                      </div>
+                      <aside className="flex min-w-0 flex-col gap-3 sm:items-end sm:justify-between">
+                        <span className="flex items-center gap-1.5 text-[10px] text-slate-500 sm:justify-end">
+                          <Clock3 className="h-3.5 w-3.5" />
+                          {formatDate(report.submitted_at)}
+                        </span>
+                        {report.evidence?.[0]?.file_path && (
+                          <div className="sm:ml-auto">
+                            {isVideoEvidence(report.evidence[0]) ? (
+                              <EvidencePreview
+                                evidence={report.evidence[0]}
+                                alt={`Video evidence preview for ${report.title}`}
+                                className="h-28 w-full rounded-lg border border-slate-800 bg-black object-cover sm:w-44"
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedReport(report)}
+                                aria-label={`Preview report details and images for ${report.title}`}
+                                className="rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              >
+                                <EvidenceImage
+                                  filePath={report.evidence[0].file_path}
+                                  alt={`Photo evidence preview for ${report.title}`}
+                                  className="h-28 w-full rounded-lg border border-slate-800 object-cover sm:w-44"
+                                />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {report.can_vote === 1 || report.can_vote === '1' || report.can_vote === true ? (
+                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => handleReportVote(report, 'confirm')}
+                              disabled={votingReportId === report.report_id}
+                              aria-pressed={report.my_vote === 'confirm'}
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
+                                report.my_vote === 'confirm'
+                                  ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200'
+                                  : 'border-slate-700 text-slate-300 hover:border-emerald-500/40 hover:text-emerald-300'
+                              }`}
+                            >
+                              <ThumbsUp className="h-3.5 w-3.5" />
+                              Confirm <span>{Number(report.confirm_count || 0)}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReportVote(report, 'dispute')}
+                              disabled={votingReportId === report.report_id}
+                              aria-pressed={report.my_vote === 'dispute'}
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
+                                report.my_vote === 'dispute'
+                                  ? 'border-rose-500/50 bg-rose-500/15 text-rose-200'
+                                  : 'border-slate-700 text-slate-300 hover:border-rose-500/40 hover:text-rose-300'
+                              }`}
+                            >
+                              <ThumbsDown className="h-3.5 w-3.5" />
+                              Dispute <span>{Number(report.dispute_count || 0)}</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-slate-500 sm:text-right">Voting unavailable</p>
+                        )}
+                      </aside>
                 </div>
               </article>
             ))}
@@ -467,10 +851,12 @@ export function ResidentDashboard() {
               <div className="py-12 text-center">
                 <FileWarning className="mx-auto mb-3 h-8 w-8 text-slate-600" />
                 <p className="text-sm font-semibold text-slate-300">
-                  {dashboard.reports.length ? 'No reports match these filters.' : 'No incident reports in the database yet.'}
+                  {communityReports.length
+                      ? 'No reports match these filters.'
+                      : 'No incident reports from other residents are available yet.'}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  {dashboard.reports.length ? 'Try another status or category.' : 'New resident submissions will appear here.'}
+                  {communityReports.length ? 'Try another status or category.' : 'New reports from other residents will appear here.'}
                 </p>
               </div>
             )}
@@ -496,6 +882,12 @@ export function ResidentDashboard() {
             </span>
           </div>
 
+          {notificationError && (
+            <div role="alert" className="mb-4 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
+              {notificationError}
+            </div>
+          )}
+
           {dashboard.alerts.length ? (
             <div className="space-y-3">
               {dashboard.alerts.map((alert) => (
@@ -513,6 +905,17 @@ export function ResidentDashboard() {
                     <p className="mt-1 text-xs leading-5 text-slate-400">{alert.message}</p>
                     <p className="mt-2 text-[10px] text-slate-500">{formatDate(alert.created_at)}</p>
                   </div>
+                  {![1, '1', true].includes(alert.is_read) && (
+                    <button
+                      type="button"
+                      onClick={() => markAlertRead(alert)}
+                      aria-label="Mark notification as read"
+                      title="Mark as read"
+                      className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-emerald-500/10 hover:text-emerald-300"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                  )}
                 </article>
               ))}
             </div>
@@ -525,6 +928,121 @@ export function ResidentDashboard() {
           )}
         </section>
       </main>
+
+      {showReportPrompt && (
+        <ResidentReportPrompt onDismiss={() => setShowReportPrompt(false)} />
+      )}
+
+      {selectedReport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedReport(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="community-report-details-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 p-5">
+              <div>
+                <h2 id="community-report-details-title" className="text-base font-extrabold text-white">
+                  Report details
+                </h2>
+                <p className="mt-1 break-all font-mono text-xs text-slate-400">
+                  {selectedReport.reference_number || 'Reference unavailable'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedReport(null)}
+                aria-label="Close report details"
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-bold text-white">{selectedReport.title}</h3>
+                <StatusBadge status={selectedReport.status} />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  ['Hazard category', selectedReport.category_name],
+                  ['Barangay', selectedReport.barangay_name || 'Barangay not specified'],
+                  ['Submitted', formatDate(selectedReport.submitted_at)],
+                  [
+                    'Community feedback',
+                    `${Number(selectedReport.confirm_count || 0)} confirmations · ${Number(selectedReport.dispute_count || 0)} disputes`,
+                  ],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+                    <p className="mt-1 break-words text-sm text-slate-200">{value || 'Not provided'}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Description
+                </h4>
+                <p className="whitespace-pre-wrap rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-sm leading-6 text-slate-300">
+                  {selectedReport.description || 'No description provided.'}
+                </p>
+              </div>
+
+              {selectedReport.evidence?.length > 0 && (
+                <div>
+                  <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                    Photo and video evidence
+                  </h4>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {selectedReport.evidence.map((item, index) => (
+                      <div key={item.evidence_id || index} className="overflow-hidden rounded-xl">
+                        {isVideoEvidence(item) ? (
+                          <EvidencePreview
+                            evidence={item}
+                            alt={`Video evidence ${index + 1} for ${selectedReport.title}`}
+                            className="max-h-96 min-h-40 w-full rounded-xl border border-slate-800 bg-black object-contain"
+                          />
+                        ) : (
+                          <a
+                            href={publicFileUrl(item.file_path)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          >
+                            <EvidenceImage
+                              filePath={item.file_path}
+                              alt={`Photo evidence ${index + 1} for ${selectedReport.title}`}
+                              className="max-h-96 min-h-40 w-full rounded-xl border border-slate-800 object-contain"
+                            />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end border-t border-slate-800 p-4">
+              <button
+                type="button"
+                onClick={() => setSelectedReport(null)}
+                className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="border-t border-slate-800 bg-slate-900/40 px-4 py-5 text-center text-[10px] text-slate-500">
         BayanAlert · Live data from the community reporting database

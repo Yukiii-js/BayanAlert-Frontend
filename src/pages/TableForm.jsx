@@ -7,6 +7,7 @@ import {
   Loader2, 
   AlertCircle, 
   CheckCircle,
+  Mail,
   Database,
   Eye,
   EyeOff
@@ -24,6 +25,9 @@ export function TableForm() {
   const [formData, setFormData] = useState({});
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState({});
+  const [notificationPreview, setNotificationPreview] = useState(null);
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [sendDepartmentEmail, setSendDepartmentEmail] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,6 +38,11 @@ export function TableForm() {
           const res = await api.getRecord(table, id);
           setTableInfo(res.data.table_info || {});
           setFields(res.data.fields || []);
+          if (table === 'hazard_reports') {
+            const preview = res.data.notification || null;
+            setNotificationPreview(preview);
+            setNotificationEmail(preview?.default_email || '');
+          }
 
           // Prepopulate form data
           const initial = {};
@@ -78,7 +87,14 @@ export function TableForm() {
 
     try {
       if (isEdit) {
-        await api.updateRecord(table, id, formData);
+        const updateData = table === 'hazard_reports'
+          ? {
+            ...formData,
+            send_department_email: sendDepartmentEmail,
+            department_email: notificationEmail.trim(),
+          }
+          : formData;
+        await api.updateRecord(table, id, updateData);
       } else {
         await api.createRecord(table, formData);
       }
@@ -98,6 +114,16 @@ export function TableForm() {
       </div>
     );
   }
+
+  const statusValue = String(formData.status || '').trim().toLowerCase();
+  const originalStatus = String(
+    notificationPreview?.report?.status || fields.find((field) => field.name === 'status')?.value || ''
+  ).trim().toLowerCase();
+  const approvalTarget = isEdit
+    && table === 'hazard_reports'
+    && ['approved', 'verified'].includes(statusValue)
+    && !['approved', 'verified'].includes(originalStatus);
+  const previewReport = notificationPreview?.report;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -128,6 +154,81 @@ export function TableForm() {
 
       {/* Form Container */}
       <form onSubmit={handleSubmit} className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl">
+        {approvalTarget && (
+          <section className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <Mail className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-bold text-white">Approval email preview</h2>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  Review the recipient and included report details before approving. The contact is preselected from this hazard category and can be changed.
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-4 flex items-center gap-2 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                checked={sendDepartmentEmail}
+                onChange={(event) => setSendDepartmentEmail(event.target.checked)}
+                className="h-4 w-4 accent-emerald-500"
+              />
+              Send this report by email when approved
+            </label>
+
+            {sendDepartmentEmail && (
+              <>
+                <label htmlFor="department-email" className="mt-4 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+                  Recipient email
+                  {notificationPreview?.department?.name && (
+                    <span className="ml-2 normal-case font-normal text-slate-400">
+                      Auto-selected: {notificationPreview.department.name}
+                    </span>
+                  )}
+                </label>
+                <input
+                  id="department-email"
+                  type="email"
+                  required
+                  value={notificationEmail}
+                  onChange={(event) => setNotificationEmail(event.target.value)}
+                  placeholder="Choose the department or contact email"
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+
+                <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300">
+                  <p className="font-semibold text-slate-100">
+                    {previewReport?.reference_number || `Report #${id}`} · {previewReport?.title || 'Hazard report'}
+                  </p>
+                  <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {[
+                      ['Category', previewReport?.category_name],
+                      ['Location', previewReport?.address_details],
+                      ['Reporter', previewReport?.reporter_name],
+                      ['Reported at', previewReport?.submitted_at],
+                      ['Coordinates', previewReport?.latitude != null && previewReport?.longitude != null
+                        ? `${previewReport.latitude}, ${previewReport.longitude}`
+                        : 'Not provided'],
+                      ['Severity', previewReport?.severity_level || 'Not specified'],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <dt className="text-[10px] uppercase tracking-wide text-slate-500">{label}</dt>
+                        <dd className="mt-0.5 break-words text-slate-300">{value || 'Not provided'}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="mt-2 whitespace-pre-wrap text-slate-400">
+                    {previewReport?.description || 'No description provided.'}
+                  </p>
+                  <p className="mt-2 text-[10px] text-slate-500">
+                    Attached media links: {previewReport?.media?.length || 0}
+                  </p>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
         <div className="space-y-5">
           {fields.map((field) => {
             const formKey = field.form_name || field.name;

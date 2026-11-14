@@ -11,6 +11,124 @@ body {
   background-color: #0b0f19;
 }
 
+.hazard-leaflet-map {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  width: 100%;
+  min-height: 320px;
+  background: #182c3c;
+}
+
+.hazard-leaflet-map .leaflet-control-attribution {
+  background: rgb(2 6 23 / 85%);
+  color: #94a3b8;
+}
+
+.hazard-leaflet-map .leaflet-control-attribution a {
+  color: #34d399;
+}
+
+.hazard-map-marker {
+  background: transparent;
+  border: 0;
+}
+
+.hazard-map-marker > span {
+  display: flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--marker-color);
+  box-shadow: 0 3px 10px rgb(0 0 0 / 40%);
+}
+
+.hazard-map-marker > span > span {
+  width: 9px;
+  height: 9px;
+  border: 2px solid white;
+  border-radius: 50%;
+}
+
+.hazard-map-popup {
+  display: grid;
+  gap: 5px;
+  color: #0f172a;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.hazard-map-popup strong {
+  font-size: 13px;
+}
+
+.weather-lottie-marker {
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  pointer-events: none !important;
+}
+
+.weather-lottie-marker__float {
+  display: block;
+  width: 100%;
+  height: 100%;
+  animation: weather-marker-float 6.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.weather-lottie-marker__float--slow {
+  animation-duration: 8s;
+}
+
+.weather-lottie-marker__animation,
+.weather-lottie-marker__animation svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.weather-lottie-marker__animation {
+  filter: drop-shadow(0 4px 10px rgb(0 0 0 / 45%));
+}
+
+@keyframes weather-marker-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -8px, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weather-lottie-marker__float,
+  .weather-reminder {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.weather-reminder {
+  will-change: transform, opacity;
+  animation: weather-reminder-enter 320ms ease-out both;
+}
+
+.weather-reminder--closing {
+  animation: weather-reminder-exit 320ms ease-in both;
+}
+
+@keyframes weather-reminder-enter {
+  from { opacity: 0; transform: translate(110%, -50%); }
+  to { opacity: 1; transform: translate(0, -50%); }
+}
+
+@keyframes weather-reminder-exit {
+  from { opacity: 1; transform: translate(0, -50%); }
+  to { opacity: 0; transform: translate(110%, -50%); }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
