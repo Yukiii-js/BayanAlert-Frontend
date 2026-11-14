@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { AlertCircle, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
-import { getCalapanWeatherEffect } from './CalapanWeather';
 import 'leaflet/dist/leaflet.css';
+
+const WeatherMapForecast = lazy(() => import('./WeatherMapForecast'));
 
 const CALAPAN_CENTER = [13.411, 121.18];
 const CALAPAN_BOUNDS = L.latLngBounds([13.25, 121.05], [13.55, 121.32]);
@@ -208,7 +209,6 @@ export function HazardMap({
     ['pending', 'Pending'],
     ['disputed', 'Disputed'],
   ];
-  const weatherEffect = getCalapanWeatherEffect(weather);
   const externalToggleCount = Object.values(externalLayerState).filter(Boolean).length;
 
   return (
@@ -247,23 +247,10 @@ export function HazardMap({
 
       <div className="relative z-0 isolate">
         <div ref={mapElement} className={`hazard-leaflet-map ${height}`} />
-        {weatherEffect && (
-          <>
-            <div
-              aria-hidden="true"
-              className={`weather-map-effect weather-map-effect--${weatherEffect}`}
-            />
-            <div
-              title={`Live weather: ${weather?.current?.condition?.text || weatherEffect.replace('-', ' ')}${weather?.current?.wind_kph >= 35 ? ` · ${Math.round(weather.current.wind_kph)} km/h wind` : ''}`}
-              className="pointer-events-none absolute right-3 top-3 z-[500] flex max-w-[calc(100%-3.5rem)] items-center gap-1.5 rounded-full border border-white/20 bg-slate-950/90 px-3 py-1.5 text-[10px] font-semibold text-white shadow-lg backdrop-blur-sm sm:max-w-[min(18rem,calc(100%-3.5rem))]"
-            >
-              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-sky-300" />
-              <span className="min-w-0 truncate">
-                Live weather: {weather?.current?.condition?.text || weatherEffect.replace('-', ' ')}
-                {weather?.current?.wind_kph >= 35 && ` · ${Math.round(weather.current.wind_kph)} km/h wind`}
-              </span>
-            </div>
-          </>
+        {!selectable && (
+          <Suspense fallback={null}>
+            <WeatherMapForecast weather={weather} />
+          </Suspense>
         )}
         {!selectable && (
           <div className="absolute right-3 top-3 z-[500]">
@@ -294,7 +281,7 @@ export function HazardMap({
           </div>
         )}
         {!selectable && (
-          <div className={`pointer-events-none absolute right-3 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl sm:right-5 ${weatherEffect ? 'top-16' : 'top-14'}`}>
+          <div className="pointer-events-none absolute right-3 top-14 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl sm:right-5">
             <p className="mb-2 text-xs font-bold text-white">Map Legend</p>
             <div className="space-y-2 text-[10px] text-slate-300">
               {statusLegend.map(([status, label]) => (

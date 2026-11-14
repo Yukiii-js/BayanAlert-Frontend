@@ -458,3 +458,14 @@ export function getCalapanWeatherEffect(weather) {
   if (text.includes('cloud') || text.includes('overcast')) return 'cloud';
   return '';
 }
+
+export function getCalapanForecastEffect(forecast) {
+  if (!forecast?.condition) return '';
+
+  const effect = getCalapanWeatherEffect({ current: forecast });
+  if (effect === 'storm' || effect === 'rain' || effect === 'rain-wind') return effect;
+  const text = String(forecast.condition.text || '').toLowerCase();
+  if (text.includes('sun') || text.includes('clear')) return 'sun';
+  if (text.includes('wind')) return 'wind';
+  return Number(forecast.chance_of_rain) >= 70 ? 'rain' : effect;
+}
