@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Activity,
   AlertTriangle,
+  CloudLightning,
   Clock3,
   ExternalLink,
   MapPin,
@@ -12,8 +12,26 @@ import {
 import { api } from '../api/client';
 
 const SOURCES = [
-  { id: 'usgs', label: 'Earthquakes', source: 'USGS', icon: Activity },
-  { id: 'gdacs', label: 'Multi-hazard alerts', source: 'GDACS', icon: Radio },
+  {
+    id: 'typhoons',
+    label: 'Typhoons',
+    providerId: 'gdacs',
+    icon: CloudLightning,
+    heading: 'Typhoon advisories',
+    description: 'GDACS tropical cyclone alerts for the Philippines and nearby region.',
+    emptyTitle: 'No active typhoon advisories',
+    emptyDescription: 'No qualifying tropical cyclone events are currently reported for this region.',
+  },
+  {
+    id: 'gdacs',
+    label: 'Multi-hazard alerts',
+    providerId: 'gdacs',
+    icon: Radio,
+    heading: 'GDACS multi-hazard feed',
+    description: 'Regional alerts with severity, hazard type, distance, and reported impact where available.',
+    emptyTitle: 'No qualifying regional advisories',
+    emptyDescription: 'No qualifying events are currently available for the selected feed.',
+  },
 ];
 
 const SEVERITY_STYLES = {
@@ -46,6 +64,23 @@ function eventLocation(event) {
   return `${latitude.toFixed(2)}°, ${longitude.toFixed(2)}°`;
 }
 
+function isTyphoonEvent(event) {
+  const hazardType = String(event.hazard_type || '').trim().toUpperCase();
+  const title = String(event.title || '').toLowerCase();
+  return ['TC', 'TROPICAL CYCLONE', 'TROPICAL STORM', 'TYPHOON'].includes(hazardType) ||
+    /\b(typhoon|tropical cyclone|tropical storm)\b/.test(title);
+}
+
+function matchesSource(event, sourceId) {
+  if (String(event.source || '').toLowerCase() !== 'gdacs') return false;
+  return sourceId === 'typhoons' ? isTyphoonEvent(event) : true;
+}
+
+function displayHazardType(value) {
+  const hazardType = String(value || '').trim();
+  return hazardType.toUpperCase() === 'TC' ? 'Tropical Cyclone' : hazardType || 'Alert';
+}
+
 function ProviderStatus({ provider }) {
   const status = String(provider?.status || 'unknown').toLowerCase();
   const isOnline = status === 'online' || status === 'success';
@@ -70,8 +105,6 @@ function publishedToResidents(event) {
 
   const source = String(event.source || '').toLowerCase();
   const distance = Number(event.distance_to_municipality_km);
-  const magnitude = Number(event.magnitude_or_score);
-  if (source === 'usgs') return distance <= 150 || magnitude >= 4.5;
   if (source === 'gdacs') return distance <= 500;
   return false;
 }
@@ -107,31 +140,25 @@ function normalizeFeedResponse(response) {
   };
 }
 
-function EventCard({ event, source }) {
+function EventCard({ event }) {
   const severity = eventSeverity(event);
-  const magnitude = Number(event.magnitude_or_score);
   const distance = Number(event.distance_to_municipality_km);
   const location = eventLocation(event);
-  const isEarthquake = source === 'USGS';
 
   return (
     <article className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-md border px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider ${
-              isEarthquake
-                ? 'border-sky-400/20 bg-sky-400/10 text-sky-300'
-                : 'border-violet-400/20 bg-violet-400/10 text-violet-300'
-            }`}>
-              {source}
+            <span className="rounded-md border border-violet-400/20 bg-violet-400/10 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider text-violet-300">
+              {event.source || 'GDACS'}
             </span>
             <span className={`rounded-md border px-2 py-1 text-[9px] font-bold uppercase tracking-wider ${SEVERITY_STYLES[severity]}`}>
-              {isEarthquake ? `Magnitude ${Number.isFinite(magnitude) ? magnitude.toFixed(1) : '—'}` : `${event.alert_level || severity} alert`}
+              {`${event.alert_level || severity} alert`}
             </span>
             {event.hazard_type && (
               <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[9px] font-bold text-slate-300">
-                {event.hazard_type}
+                {displayHazardType(event.hazard_type)}
               </span>
             )}
           </div>
@@ -166,34 +193,23 @@ function EventCard({ event, source }) {
 
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{isEarthquake ? 'Magnitude' : 'Alert level'}</p>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Alert level</p>
           <p className={`mt-1 text-sm font-extrabold ${severity === 'red' ? 'text-rose-300' : severity === 'orange' ? 'text-amber-300' : 'text-emerald-300'}`}>
-            {isEarthquake ? (Number.isFinite(magnitude) ? magnitude.toFixed(1) : '—') : (event.alert_level || 'Green')}
+            {event.alert_level || 'Green'}
           </p>
         </div>
-        {isEarthquake ? (
-          <div className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Depth</p>
-            <p className="mt-1 text-sm font-extrabold text-sky-200">
-              {Number.isFinite(Number(event.depth_km)) ? `${Number(event.depth_km).toFixed(1)} km` : '—'}
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Hazard type</p>
-            <p className="mt-1 text-sm font-extrabold text-violet-200">{event.hazard_type || 'Alert'}</p>
-          </div>
-        )}
+        <div className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
+          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Hazard type</p>
+          <p className="mt-1 text-sm font-extrabold text-violet-200">{displayHazardType(event.hazard_type)}</p>
+        </div>
         <div className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
           <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Distance</p>
           <p className="mt-1 text-sm font-extrabold text-slate-100">{Number.isFinite(distance) ? `${distance.toFixed(1)} km` : '—'}</p>
         </div>
         <div className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{isEarthquake ? 'Tsunami status' : 'Est. affected'}</p>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Est. affected</p>
           <p className="mt-1 text-sm font-extrabold text-slate-100">
-            {isEarthquake
-              ? (event.tsunami ? 'Possible' : 'Not indicated')
-              : (Number(event.affected_population) > 0 ? Number(event.affected_population).toLocaleString() : 'Not reported')}
+            {Number(event.affected_population) > 0 ? Number(event.affected_population).toLocaleString() : 'Not reported'}
           </p>
         </div>
       </div>
@@ -203,7 +219,7 @@ function EventCard({ event, source }) {
 
 export function ExternalAdvisories() {
   const [feed, setFeed] = useState(null);
-  const [activeSource, setActiveSource] = useState('usgs');
+  const [activeSource, setActiveSource] = useState('typhoons');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -234,15 +250,17 @@ export function ExternalAdvisories() {
   }, []);
 
   const source = SOURCES.find((item) => item.id === activeSource) || SOURCES[0];
-  const provider = feed?.providers?.[source.id];
+  const provider = feed?.providers?.[source.providerId];
   const events = useMemo(
     () => (feed?.events || [])
-      .filter((event) => String(event.source || '').toLowerCase() === activeSource)
+      .filter((event) => matchesSource(event, activeSource))
     .filter(publishedToResidents),
     [feed, activeSource]
   );
   const alertCount = useMemo(
-    () => (feed?.events || []).filter(publishedToResidents).length,
+    () => (feed?.events || [])
+      .filter((event) => matchesSource(event, 'gdacs'))
+      .filter(publishedToResidents).length,
     [feed]
   );
   const Icon = source.icon;
@@ -259,7 +277,7 @@ export function ExternalAdvisories() {
               <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-sky-300">Regional intelligence</p>
               <h2 className="mt-1 text-lg font-extrabold text-white sm:text-xl">Official hazard advisories</h2>
               <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
-                Earthquake observations and regional multi-hazard alerts relevant to Oriental Mindoro.
+                Typhoon and regional multi-hazard alerts relevant to Oriental Mindoro.
               </p>
             </div>
           </div>
@@ -281,10 +299,10 @@ export function ExternalAdvisories() {
           {SOURCES.map((item) => {
             const ItemIcon = item.icon;
             const count = (feed?.events || []).filter((event) => (
-              String(event.source || '').toLowerCase() === item.id &&
+              matchesSource(event, item.id) &&
               publishedToResidents(event)
             )).length;
-            const itemProvider = feed?.providers?.[item.id];
+            const itemProvider = feed?.providers?.[item.providerId];
             const selected = activeSource === item.id;
             return (
               <button
@@ -319,12 +337,10 @@ export function ExternalAdvisories() {
           <div>
             <h3 className="flex items-center gap-2 text-sm font-bold text-white">
               <Icon className="h-4 w-4 text-sky-300" />
-              {source.source} {activeSource === 'usgs' ? 'earthquake feed' : 'multi-hazard feed'}
+              {source.heading}
             </h3>
             <p className="mt-1 text-[10px] text-slate-500">
-              {activeSource === 'usgs'
-                ? 'Recent earthquakes within the regional search radius, ordered by observation time.'
-                : 'Regional alerts with severity, hazard type, distance, and reported impact where available.'}
+              {source.description}
             </p>
           </div>
           {provider && <ProviderStatus provider={provider} />}
@@ -351,19 +367,19 @@ export function ExternalAdvisories() {
         ) : events.length ? (
           <div className="space-y-3">
             {events.map((event) => (
-              <EventCard key={event.id || `${event.source}-${event.event_timestamp}-${event.title}`} event={event} source={source.source} />
+              <EventCard key={event.id || `${event.source}-${event.event_timestamp}-${event.title}`} event={event} />
             ))}
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-10 text-center">
             <Icon className="mx-auto h-7 w-7 text-slate-600" />
             <p className="mt-3 text-sm font-semibold text-slate-300">
-              {provider?.status === 'error' ? 'Advisories unavailable' : `No qualifying ${source.source} advisories`}
+              {provider?.status === 'error' ? 'Advisories unavailable' : source.emptyTitle}
             </p>
             <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-slate-500">
               {provider?.status === 'error'
                 ? 'Try refreshing later. Provider outages are shown as unavailable rather than replaced with sample events.'
-                : 'No qualifying events are currently available for the selected feed.'}
+                : source.emptyDescription}
             </p>
             {provider?.status === 'error' && (
               <button
