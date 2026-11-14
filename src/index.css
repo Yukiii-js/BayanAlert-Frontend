@@ -138,6 +138,20 @@ body {
   animation: weather-cloud-drift 18s ease-in-out infinite alternate;
 }
 
+.weather-map-animation-floater {
+  position: absolute;
+  aspect-ratio: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 16px rgb(15 23 42 / 20%));
+  animation: weather-map-float 8s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes weather-map-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -11px, 0); }
+}
+
 @keyframes weather-rain-drift {
   from { transform: translate3d(24px, -36px, 0); }
   to { transform: translate3d(-24px, 36px, 0); }
@@ -168,6 +182,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .weather-map-effect,
   .weather-map-effect::after,
+  .weather-map-animation-floater,
   .weather-reminder {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
