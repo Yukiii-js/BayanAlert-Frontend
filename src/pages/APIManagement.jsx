@@ -169,6 +169,7 @@ export function APIManagement() {
             const enabled = config.is_enabled !== false;
             const label = statusLabel(config.status || config.last_status, enabled);
             const rowBusy = busyKey === key;
+            const rowError = rowErrors[key] || (label === 'Error' ? config.last_error_message : '');
             return (
               <article key={key} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-black/10">
                 <div className="flex items-start justify-between gap-4">
@@ -219,15 +220,12 @@ export function APIManagement() {
                     </button>
                   </div>
                 </div>
-                {config.last_error_message && label === 'Error' && (
+                {rowError && (
                   <p className="mt-3 rounded-lg border border-rose-500/15 bg-rose-500/5 p-2.5 text-[10px] leading-5 text-rose-200">
-                    {config.last_error_message}
-                  </p>
-                )}
-                {rowErrors[key] && (
-                  <p role="alert" className="mt-3 flex items-start gap-2 rounded-lg border border-rose-500/15 bg-rose-500/5 p-2.5 text-[10px] leading-5 text-rose-200">
-                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    {rowErrors[key]}
+                    <span className="inline-flex items-start gap-2">
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      {rowError}
+                    </span>
                   </p>
                 )}
               </article>
