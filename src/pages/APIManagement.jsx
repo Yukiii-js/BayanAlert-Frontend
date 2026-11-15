@@ -284,7 +284,7 @@ export function APIManagement() {
           Loading API configurations…
         </div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {apis.map((apiConfig) => {
             const Icon = CATEGORY_ICONS[apiConfig.category] || Shield;
             const enabled = isEnabled(apiConfig.is_enabled);
