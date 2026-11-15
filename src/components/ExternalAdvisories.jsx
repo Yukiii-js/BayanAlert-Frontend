@@ -3,9 +3,9 @@ import {
   Activity,
   AlertTriangle,
   CloudLightning,
+  CloudRain,
   Clock3,
   ExternalLink,
-  Globe2,
   MapPin,
   Radio,
   RefreshCw,
@@ -29,8 +29,8 @@ const SOURCES = [
     label: 'Multi-hazard alerts',
     providerId: 'gdacs',
     icon: Radio,
-    heading: 'GDACS multi-hazard feed',
-    description: 'Regional alerts with severity, hazard type, distance, and reported impact where available.',
+    heading: 'Regional multi-hazard alerts',
+    description: 'GDACS alerts and USGS earthquakes with severity, location, and source details.',
     emptyTitle: 'No qualifying regional advisories',
     emptyDescription: 'No qualifying events are currently available for the selected feed.',
   },
@@ -45,14 +45,14 @@ const SOURCES = [
     emptyDescription: 'No matching USGS earthquake events are available for this view.',
   },
   {
-    id: 'reliefweb',
-    label: 'ReliefWeb disasters',
-    providerId: 'reliefweb',
-    icon: Globe2,
-    heading: 'ReliefWeb disaster reports',
-    description: 'Recent Philippines disaster reports from the free, keyless ReliefWeb API.',
-    emptyTitle: 'No recent disaster reports',
-    emptyDescription: 'No Philippines disaster reports are currently available for this view.',
+    id: 'weather',
+    label: 'Local weather',
+    providerId: 'open_meteo',
+    icon: CloudRain,
+    heading: 'Open-Meteo weather conditions',
+    description: 'Current and forecast rainfall, wind speed, and gusts for Calapan City.',
+    emptyTitle: 'Weather conditions unavailable',
+    emptyDescription: 'No current Calapan City conditions are available.',
   },
 ];
 
@@ -98,21 +98,44 @@ function eventLocation(event) {
 function isTyphoonEvent(event) {
   const hazardType = String(event.hazard_type || '').trim().toUpperCase();
   const title = String(event.title || '').toLowerCase();
-  return ['TC', 'TROPICAL CYCLONE', 'TROPICAL STORM', 'TYPHOON'].includes(hazardType) ||
+  return ['TC', 'TYPHOON', 'TROPICAL CYCLONE', 'TROPICAL STORM'].includes(hazardType) ||
     /\b(typhoon|tropical cyclone|tropical storm)\b/.test(title);
 }
 
 function matchesSource(event, sourceId) {
   const eventSource = String(event.source || '').toLowerCase();
   if (sourceId === 'typhoons') return eventSource === 'gdacs' && isTyphoonEvent(event);
-  if (sourceId === 'gdacs') return eventSource === 'gdacs' && !isTyphoonEvent(event);
+  if (sourceId === 'gdacs') {
+    return (eventSource === 'gdacs' && !isTyphoonEvent(event)) || eventSource === 'usgs';
+  }
   if (sourceId === 'earthquakes') return eventSource === 'usgs';
-  return sourceId === 'reliefweb' && eventSource === 'reliefweb';
+  return sourceId === 'weather' && eventSource === 'open_meteo';
 }
 
 function displayHazardType(value) {
   const hazardType = String(value || '').trim();
-  return hazardType.toUpperCase() === 'TC' ? 'Tropical Cyclone' : hazardType || 'Alert';
+  const normalized = hazardType.toUpperCase();
+  const labels = {
+    TC: 'Tropical Cyclone',
+    TYPHOON: 'Tropical Cyclone',
+    EARTHQUAKE: 'Earthquake',
+    RAINFALL: 'Heavy Rainfall',
+    WEATHER: 'Weather Conditions',
+    WIND: 'Strong Wind',
+    'SEVERE-WEATHER': 'Severe Weather',
+  };
+  return labels[normalized] || hazardType || 'Alert';
+}
+
+function sourceLabel(value) {
+  const source = String(value || '').toUpperCase();
+  if (source === 'OPEN_METEO') return 'Open-Meteo';
+  return source || 'GDACS';
+}
+
+function formatWeatherMetric(value, unit) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? `${numericValue.toFixed(1)} ${unit}` : '—';
 }
 
 function ProviderStatus({ provider }) {
@@ -141,19 +164,20 @@ function publishedToResidents(event) {
   if ([0, '0', false].includes(event.is_published_to_residents)) return false;
 
   const source = String(event.source || '').toLowerCase();
-  return ['gdacs', 'usgs', 'reliefweb'].includes(source)
+  return ['gdacs', 'usgs', 'open_meteo'].includes(source)
     && (event.is_philippines_event === true ||
       (event.distance_to_municipality_km !== null && event.distance_to_municipality_km !== undefined &&
         Number.isFinite(Number(event.distance_to_municipality_km))));
 }
 
 function matchesScope(event, scope) {
-  if (scope === 'national') {
+  if (scope === 'regional') {
     if (event.is_philippines_event === true) return true;
     const latitude = Number(event.latitude);
     const longitude = Number(event.longitude);
     return Number.isFinite(latitude) && Number.isFinite(longitude) &&
-      latitude >= 4 && latitude <= 22 && longitude >= 116 && longitude <= 127;
+      ((latitude >= 4 && latitude <= 22 && longitude >= 116 && longitude <= 127) ||
+        (isTyphoonEvent(event) && latitude >= 5 && latitude <= 25 && longitude >= 115 && longitude <= 135));
   }
   const distance = event.distance_to_municipality_km === null || event.distance_to_municipality_km === undefined
     ? NaN
@@ -200,6 +224,10 @@ function advisoryIdentity(event) {
 
 function EventCard({ event, highlighted }) {
   const severity = eventSeverity(event);
+  const weather = event.weather_details;
+  const alertLabel = String(event.alert_level || '').toUpperCase() === 'NORMAL'
+    ? 'Normal conditions'
+    : `${event.alert_level || severity} alert`;
   const distance = event.distance_to_municipality_km === null || event.distance_to_municipality_km === undefined
     ? NaN
     : Number(event.distance_to_municipality_km);
@@ -219,10 +247,10 @@ function EventCard({ event, highlighted }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md border border-violet-400/20 bg-violet-400/10 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider text-violet-300">
-              {event.source || 'GDACS'}
+              {sourceLabel(event.source)}
             </span>
             <span className={`rounded-md border px-2 py-1 text-[9px] font-bold uppercase tracking-wider ${SEVERITY_STYLES[severity]}`}>
-              {`${event.alert_level || severity} alert`}
+              {alertLabel}
             </span>
             {event.hazard_type && (
               <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[9px] font-bold text-slate-300">
@@ -233,6 +261,11 @@ function EventCard({ event, highlighted }) {
           <h3 className="mt-3 break-words text-sm font-bold leading-5 text-white sm:text-base">
             {event.title || 'Regional hazard event'}
           </h3>
+          {event.description && (
+            <p className="mt-1 max-h-10 overflow-hidden text-xs leading-5 text-slate-400">
+              {event.description}
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[10px] text-slate-400">
             <span className="inline-flex items-center gap-1.5">
               <Clock3 className="h-3.5 w-3.5 text-slate-500" />
@@ -260,6 +293,21 @@ function EventCard({ event, highlighted }) {
         )}
       </div>
 
+      {weather ? (
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            ['Temperature', weather.temperature_c, '°C'],
+            ['Rainfall (current/forecast max)', weather.precipitation_mm, 'mm'],
+            ['Wind speed', weather.wind_speed_kmh, 'km/h'],
+            ['Wind gusts', weather.wind_gust_kmh, 'km/h'],
+          ].map(([label, value, unit]) => (
+            <div key={label} className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+              <p className="mt-1 text-sm font-extrabold text-slate-100">{formatWeatherMetric(value, unit)}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
           <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Alert level</p>
@@ -282,13 +330,14 @@ function EventCard({ event, highlighted }) {
           </p>
         </div>
       </div>
+      )}
     </article>
   );
 }
 
 export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
   const [feed, setFeed] = useState(null);
-  const [activeSource, setActiveSource] = useState('typhoons');
+  const [activeSource, setActiveSource] = useState('gdacs');
   const [scope, setScope] = useState('regional');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -334,12 +383,12 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
 
     const targetSource = target.source === 'USGS'
       ? 'earthquakes'
-      : target.source === 'RELIEFWEB'
-        ? 'reliefweb'
+      : target.source === 'OPEN_METEO'
+        ? 'weather'
         : isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
     if (activeSource !== targetSource) setActiveSource(targetSource);
     const distance = Number(target.distance_to_municipality_km);
-    if (!Number.isFinite(distance) || distance > 150) setScope('national');
+    if (!Number.isFinite(distance) || distance > 150) setScope('regional');
   }, [feed, highlightedAdvisoryId, activeSource, scope]);
 
   useEffect(() => {
@@ -349,8 +398,8 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
     );
     const targetSource = target?.source === 'USGS'
       ? 'earthquakes'
-      : target?.source === 'RELIEFWEB'
-        ? 'reliefweb'
+      : target?.source === 'OPEN_METEO'
+        ? 'weather'
         : target && isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
     if (!target || activeSource !== targetSource) return;
 
@@ -448,8 +497,8 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950/60 p-1" role="group" aria-label="Advisory region">
             {[
-              { value: 'regional', label: 'Regional (Oriental Mindoro)' },
-              { value: 'national', label: 'National (Philippines)' },
+              { value: 'local', label: 'Oriental Mindoro (Local)' },
+              { value: 'regional', label: 'Philippines / PAR (Regional)' },
             ].map((option) => (
               <button
                 key={option.value}
