@@ -1,13 +1,11 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  ShieldAlert,
-  Map,
-  List,
+  Activity,
+  FileWarning,
   PlusCircle,
   Bell,
-  User,
   LogOut,
   Search,
   MapPin,
@@ -22,15 +20,18 @@ import {
   CheckCircle,
   RefreshCw,
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, publicFileUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { HazardMap } from '../components/HazardMap';
+import { BrandLogo } from '../components/BrandLogo';
 
 const EMPTY_FORM = {
   category_id: '',
-  station_id: '',
   title: '',
   description: '',
   address_details: '',
+  latitude: '',
+  longitude: '',
 };
 
 function formatStatus(status) {
@@ -55,6 +56,7 @@ function statusStyle(status) {
   const styles = {
     pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
     verified: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    disputed: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
     assigned: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
     in_progress: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300',
     resolved: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
@@ -106,19 +108,21 @@ function normalizeReport(report) {
   };
 }
 
-export default function SubmittedReports() {
+export default function SubmittedReports({ view = 'submit' }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [stations, setStations] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState('');
   const [formError, setFormError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [addressLookup, setAddressLookup] = useState('idle');
+  const [addressLookupError, setAddressLookupError] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
@@ -130,6 +134,9 @@ export default function SubmittedReports() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [evidenceFiles, setEvidenceFiles] = useState([]);
   const [existingEvidence, setExistingEvidence] = useState([]);
+  const addressLookupTimer = useRef(null);
+  const addressLookupController = useRef(null);
+  const lastAddressLookupAt = useRef(0);
 
   async function loadPageData() {
     setLoading(true);
@@ -139,7 +146,6 @@ export default function SubmittedReports() {
       const results = await Promise.all([
         api.getResidentReports(),
         api.getReportCategories(),
-        api.getStations(),
       ]);
 
       const reportList = getList(results[0], ['reports']).map(normalizeReport);
@@ -147,14 +153,12 @@ export default function SubmittedReports() {
         'categories',
         'hazard_categories',
       ]);
-      const stationList = getList(results[2], ['stations']);
 
       setReports(reportList);
       setCategories(categoryList);
-      setStations(stationList);
     } catch (error) {
       setPageError(
-        `${error.message}. Check that the reports, hazard-categories, and stations API routes exist in your LavaLust backend.`
+        `${error.message}. Check that the reports and hazard-categories API routes exist in your LavaLust backend.`
       );
     } finally {
       setLoading(false);
@@ -206,6 +210,9 @@ export default function SubmittedReports() {
   );
 
   function resetForm() {
+    cancelAddressLookup();
+    setAddressLookup('idle');
+    setAddressLookupError('');
     setForm(EMPTY_FORM);
     setEvidenceFiles([]);
     setExistingEvidence([]);
@@ -215,6 +222,9 @@ export default function SubmittedReports() {
   }
 
   function openCreateForm() {
+    cancelAddressLookup();
+    setAddressLookup('idle');
+    setAddressLookupError('');
     setEditingReport(null);
     setForm(EMPTY_FORM);
     setEvidenceFiles([]);
@@ -225,19 +235,30 @@ export default function SubmittedReports() {
     setSelectedReport(null);
   }
 
+  useEffect(() => {
+    if (view === 'history') return;
+    if (!location.state?.openCreateReport) return;
+    openCreateForm();
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.key, location.pathname, location.state, navigate, view]);
+
   function openEditForm(report) {
     if (!canEdit(report)) {
       setFormError('This report cannot be edited because of its current status.');
       return;
     }
 
+    cancelAddressLookup();
+    setAddressLookup('idle');
+    setAddressLookupError('');
     setEditingReport(report);
     setForm({
       category_id: String(report.category_id ?? ''),
-      station_id: String(report.station_id ?? ''),
       title: report.title || '',
       description: report.description || '',
       address_details: report.address_details || '',
+      latitude: report.latitude || '',
+      longitude: report.longitude || '',
     });
     setEvidenceFiles([]);
     setExistingEvidence(report.evidence || []);
@@ -256,10 +277,86 @@ export default function SubmittedReports() {
   function handleFormChange(event) {
     const { name, value } = event.target;
 
+    if (name === 'address_details') {
+      cancelAddressLookup();
+      setAddressLookup('idle');
+      setAddressLookupError('');
+    }
+
     setForm((previous) => ({
       ...previous,
       [name]: value,
     }));
+  }
+
+  function cancelAddressLookup() {
+    if (addressLookupTimer.current) {
+      window.clearTimeout(addressLookupTimer.current);
+      addressLookupTimer.current = null;
+    }
+    addressLookupController.current?.abort();
+    addressLookupController.current = null;
+  }
+
+  useEffect(() => () => cancelAddressLookup(), []);
+
+  function handleMapLocationSelect({ latitude, longitude }) {
+    cancelAddressLookup();
+    setAddressLookup('loading');
+    setAddressLookupError('');
+    setForm((previous) => ({ ...previous, latitude, longitude }));
+
+    const waitForRateLimit = Math.max(
+      350,
+      1100 - (Date.now() - lastAddressLookupAt.current)
+    );
+
+    addressLookupTimer.current = window.setTimeout(async () => {
+      const controller = new AbortController();
+      addressLookupController.current = controller;
+      lastAddressLookupAt.current = Date.now();
+
+      try {
+        const query = new URLSearchParams({
+          format: 'jsonv2',
+          lat: latitude,
+          lon: longitude,
+          zoom: '18',
+          addressdetails: '1',
+        });
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?${query}`,
+          {
+            headers: { 'Accept-Language': 'en' },
+            signal: controller.signal,
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`Address lookup failed (HTTP ${response.status}).`);
+        }
+
+        const result = await response.json();
+        if (typeof result.display_name !== 'string' || !result.display_name.trim()) {
+          throw new Error('No street address was found for this map point.');
+        }
+
+        setForm((previous) => ({
+          ...previous,
+          address_details: result.display_name.trim().slice(0, 255),
+        }));
+        setAddressLookup('idle');
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        setAddressLookup('error');
+        setAddressLookupError(
+          error.message || 'Could not look up this address. Enter it manually.'
+        );
+      } finally {
+        if (addressLookupController.current === controller) {
+          addressLookupController.current = null;
+        }
+      }
+    }, waitForRateLimit);
   }
 
   function handleFileChange(event) {
@@ -324,10 +421,11 @@ export default function SubmittedReports() {
       if (hasFiles) {
         body = new FormData();
         body.append('category_id', form.category_id);
-        body.append('station_id', form.station_id);
         body.append('title', form.title.trim());
         body.append('description', form.description.trim());
         body.append('address_details', form.address_details.trim());
+        body.append('latitude', form.latitude);
+        body.append('longitude', form.longitude);
 
         evidenceFiles.forEach((file) => {
           body.append('evidence[]', file);
@@ -335,25 +433,27 @@ export default function SubmittedReports() {
       } else {
         body = {
           category_id: Number(form.category_id),
-          station_id: form.station_id ? Number(form.station_id) : null,
           title: form.title.trim(),
           description: form.description.trim(),
           address_details: form.address_details.trim(),
+          latitude: form.latitude || null,
+          longitude: form.longitude || null,
         };
       }
 
+      let response;
       if (isEditing) {
-        await api.updateResidentReport(editingReport.report_id, body);
+        response = await api.updateResidentReport(editingReport.report_id, body);
       } else {
-        await api.createResidentReport(body);
+        response = await api.createResidentReport(body);
       }
 
       resetForm();
-      setSuccessMessage(
+      setSuccessMessage(response?.message || (
         isEditing
           ? 'Your report was updated successfully.'
           : 'Your hazard report was submitted successfully.'
-      );
+      ));
 
       await loadPageData();
     } catch (error) {
@@ -369,108 +469,120 @@ export default function SubmittedReports() {
   }
 
   const navItems = [
-    { label: 'Map & Dashboard', to: '/resident', icon: Map },
+    { label: 'Dashboard', to: '/resident#dashboard', icon: Activity },
+    { label: 'Incident Feed', to: '/resident#incident-feed', icon: FileWarning },
     {
-      label: 'Submitted Reports',
-      to: '/resident/submitted-reports',
-      icon: List,
-    },
-    {
-      label: 'Submit Report',
+      label: 'Submit Reports',
       to: '/resident/submitted-reports',
       icon: PlusCircle,
-      action: openCreateForm,
+      state: { openCreateReport: true },
     },
+    { label: 'Report History', to: '/resident/report-history', icon: FileText },
+    { label: 'Regional Advisories', to: '/resident#regional-advisories', icon: Activity },
     { label: 'Alerts', to: '/resident#alerts', icon: Bell },
-    { label: 'My Profile', to: '/resident/profile', icon: User },
   ];
+  const activeTab = location.pathname === '/resident/report-history'
+    ? 'Report History'
+    : location.pathname === '/resident/submitted-reports'
+      ? 'Submit Reports'
+    : location.hash === '#incident-feed'
+      ? 'Incident Feed'
+      : location.hash === '#regional-advisories'
+        ? 'Regional Advisories'
+      : location.hash === '#alerts'
+        ? 'Alerts'
+        : 'Dashboard';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-slate-700 bg-slate-950 text-white shadow-md">
+      <header className="sticky top-0 z-30 border-b border-slate-700/80 bg-slate-900/80 text-white shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur-xl after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-orange-500/40 after:to-transparent">
         <div className="mx-auto flex min-h-[64px] max-w-[1500px] items-center justify-between gap-3 px-4 lg:px-7">
-          <Link to="/resident" className="flex shrink-0 items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 shadow-lg shadow-emerald-900/30">
-              <ShieldAlert className="h-5 w-5" />
+          <Link to="/resident" className="flex shrink-0 items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center">
+              <BrandLogo className="h-10 w-10" />
             </span>
             <span>
               <span className="block text-sm font-extrabold">BayanAlert</span>
-              <span className="block text-[9px] text-slate-400">
-                Community Hazard Reporting
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-emerald-400">
+                Community safety
               </span>
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-1 lg:flex">
-            {navItems.map(({ label, to, icon: Icon, action }) => (
-              <button
+          <nav className="hidden items-center gap-1 xl:flex">
+            {navItems.map(({ label, to, icon: Icon, state }) => (
+              <Link
                 key={label}
-                type="button"
-                onClick={action || (() => navigate(to))}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[11px] font-semibold transition ${
-                  label === 'Submitted Reports'
+                to={to}
+                state={state}
+                aria-current={activeTab === label ? 'page' : undefined}
+                className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                  activeTab === label
                     ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-4 w-4" />
                 {label}
-              </button>
+              </Link>
             ))}
           </nav>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-700 px-3 py-2 text-[10px] text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-[10px] font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white"
           >
             <LogOut className="h-3.5 w-3.5" />
             Logout
           </button>
         </div>
 
-        <nav className="flex gap-1 overflow-x-auto border-t border-slate-800 px-3 py-2 lg:hidden">
-          {navItems.map(({ label, to, icon: Icon, action }) => (
-            <button
+        <nav className="grid grid-cols-2 gap-1 border-t border-slate-800 px-3 py-2 xl:hidden">
+          {navItems.map(({ label, to, icon: Icon, state }) => (
+            <Link
               key={label}
-              type="button"
-              onClick={action || (() => navigate(to))}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[10px] font-semibold ${
-                label === 'Submitted Reports'
+              to={to}
+              state={state}
+              aria-current={activeTab === label ? 'page' : undefined}
+              className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-[10px] font-semibold ${
+                activeTab === label
                   ? 'bg-emerald-600 text-white'
                   : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
               {label}
-            </button>
+            </Link>
           ))}
         </nav>
       </header>
 
       <main className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-7">
-        <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <section className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
               Resident Portal
             </p>
             <h1 className="text-2xl font-extrabold text-white">
-              My Submitted Reports
+              {view === 'history' ? 'Report History' : 'Submit a Hazard Report'}
             </h1>
             <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">
-              Create reports, update pending submissions, attach evidence, and
-              track report status.
+              {view === 'history'
+                ? 'Review report status, submitted evidence, locations, and response-team remarks.'
+                : 'Share incident details, location, and evidence with the response team.'}
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={openCreateForm}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-900/30 transition hover:bg-emerald-500"
-          >
-            <PlusCircle className="h-4 w-4" />
-            Create New Report
-          </button>
+          {view === 'submit' && !showForm && (
+            <button
+              type="button"
+              onClick={openCreateForm}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500"
+            >
+              <PlusCircle className="h-4 w-4" />
+              Create report
+            </button>
+          )}
         </section>
 
         {successMessage && (
@@ -501,7 +613,7 @@ export default function SubmittedReports() {
         )}
 
         {/* Summary cards */}
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {view === 'history' && <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
             { label: 'My Reports', count: summary.total, color: 'text-emerald-300', icon: FileText },
             { label: 'Pending', count: summary.pending, color: 'text-amber-300', icon: Clock },
@@ -516,7 +628,7 @@ export default function SubmittedReports() {
               <p className={`mt-2 text-2xl font-extrabold ${color}`}>{count}</p>
             </div>
           ))}
-        </section>
+        </section>}
 
         {/* Create/edit form */}
         {showForm && (
@@ -549,7 +661,14 @@ export default function SubmittedReports() {
               )}
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
+                <div className="col-span-full border-b border-slate-800 pb-2">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-300">
+                    1. Incident details
+                  </h3>
+                  <p className="mt-1 text-[10px] text-slate-500">Identify the hazard and describe what happened.</p>
+                </div>
+
+                <div className="md:col-span-2">
                   <label htmlFor="category_id" className="mb-1.5 block text-xs font-bold text-slate-300">
                     Hazard Category <span className="text-rose-400">*</span>
                   </label>
@@ -571,32 +690,6 @@ export default function SubmittedReports() {
                       </option>
                     ))}
                   </select>
-                </div>
-
-                <div>
-                  <label htmlFor="station_id" className="mb-1.5 block text-xs font-bold text-slate-300">
-                    Station (optional)
-                  </label>
-                  <select
-                    id="station_id"
-                    name="station_id"
-                    value={form.station_id}
-                    onChange={handleFormChange}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-100 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    <option value="">No station selected</option>
-                    {stations.map((station) => (
-                      <option
-                        key={station.station_id}
-                        value={station.station_id}
-                      >
-                        {station.station_name || station.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-[10px] text-slate-500">
-                    Leave blank if the report has not been assigned to a station.
-                  </p>
                 </div>
 
                 <div className="md:col-span-2">
@@ -631,6 +724,13 @@ export default function SubmittedReports() {
                   />
                 </div>
 
+                <div className="col-span-full border-b border-slate-800 pb-2 pt-2">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-300">
+                    2. Location
+                  </h3>
+                  <p className="mt-1 text-[10px] text-slate-500">Pinpoint the incident to fill its address automatically, or enter the address yourself.</p>
+                </div>
+
                 <div className="md:col-span-2">
                   <label htmlFor="address_details" className="mb-1.5 block text-xs font-bold text-slate-300">
                     Hazard Location / Address <span className="text-rose-400">*</span>
@@ -645,6 +745,34 @@ export default function SubmittedReports() {
                     placeholder="Enter the barangay, street, or specific location"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                   />
+                  <p className={`mt-1 text-[10px] ${addressLookupError ? 'text-rose-300' : 'text-slate-500'}`}>
+                    {addressLookup === 'loading'
+                      ? 'Looking up the selected map location...'
+                      : addressLookupError || 'Address lookup by OpenStreetMap. You can edit the suggested address.'}
+                  </p>
+                </div>
+
+                <div className="md:col-span-2">
+                  <HazardMap
+                    selectable
+                    height="h-[320px]"
+                    selectedLocation={form.latitude && form.longitude
+                      ? { latitude: form.latitude, longitude: form.longitude }
+                      : null}
+                    onLocationSelect={handleMapLocationSelect}
+                  />
+                  <p className="mt-2 text-[10px] text-slate-400">
+                    {form.latitude && form.longitude
+                      ? `Selected location: ${form.latitude}, ${form.longitude}`
+                      : 'Select a point on the map to include precise hazard coordinates (optional).'}
+                  </p>
+                </div>
+
+                <div className="col-span-full border-b border-slate-800 pb-2 pt-2">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-300">
+                    3. Supporting evidence
+                  </h3>
+                  <p className="mt-1 text-[10px] text-slate-500">Attach photos, video, or a document if available.</p>
                 </div>
 
                 <div className="md:col-span-2">
@@ -737,7 +865,7 @@ export default function SubmittedReports() {
         )}
 
         {/* Reports list */}
-        <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 shadow-xl shadow-black/10">
+        {view === 'history' && <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 shadow-xl shadow-black/10">
           <div className="border-b border-slate-800 p-4 sm:p-5">
             <h2 className="text-sm font-extrabold text-white">
               Report History
@@ -846,19 +974,19 @@ export default function SubmittedReports() {
               <p className="mt-1 text-xs text-slate-400">
                 Try changing your search or status filter, or create a new report.
               </p>
-              <button
-                type="button"
-                onClick={openCreateForm}
+              <Link
+                to="/resident/submitted-reports"
+                state={{ openCreateReport: true }}
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500"
               >
                 <PlusCircle className="h-4 w-4" />
                 Create Report
-              </button>
+              </Link>
             </div>
           )}
-        </section>
+        </section>}
 
-        <footer className="py-3 text-center text-[10px] text-slate-500">
+        <footer className="relative py-3 text-center text-[10px] text-slate-500 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-orange-500/35 before:to-transparent">
           BayanAlert · Community Hazard Reporting and Verification System
         </footer>
       </main>
@@ -907,9 +1035,13 @@ export default function SubmittedReports() {
                 ['Category', selectedReport.category_name],
                 ['Station', selectedReport.station_name],
                 ['Location', selectedReport.address_details],
+                ['Coordinates', selectedReport.latitude != null && selectedReport.longitude != null
+                  ? `${selectedReport.latitude}, ${selectedReport.longitude}`
+                  : null],
                 ['Submitted', formatDate(selectedReport.submitted_at)],
+                ['Admin remarks', selectedReport.admin_remarks || selectedReport.verification_remarks || selectedReport.remarks],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                value && <div key={label} className="rounded-lg border border-slate-800 bg-slate-950 p-3">
                   <p className="text-[10px] text-slate-500">{label}</p>
                   <p className="mt-1 break-words text-xs font-semibold text-slate-200">
                     {value || 'Not provided'}
@@ -943,13 +1075,24 @@ export default function SubmittedReports() {
                       {selectedReport.evidence.map((item, index) => (
                         <div
                           key={item.evidence_id || index}
-                          className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300"
+                          className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300"
                         >
-                          <FileText className="h-4 w-4 shrink-0 text-emerald-400" />
-                          <span className="break-all">
-                            {item.file_path?.split('/').pop() ||
-                              `Evidence ${index + 1}`}
+                          <span className="flex min-w-0 items-center gap-2">
+                            <FileText className="h-4 w-4 shrink-0 text-emerald-400" />
+                            <span className="break-all">
+                              {item.file_path?.split('/').pop() || `Evidence ${index + 1}`}
+                            </span>
                           </span>
+                          {publicFileUrl(item.file_path) && (
+                            <a
+                              href={publicFileUrl(item.file_path)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="shrink-0 rounded-md px-2 py-1 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/10"
+                            >
+                              Open
+                            </a>
+                          )}
                         </div>
                       ))}
                     </div>
