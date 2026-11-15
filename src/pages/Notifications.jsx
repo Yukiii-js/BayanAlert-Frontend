@@ -10,6 +10,7 @@ import {
   Send,
 } from 'lucide-react';
 import { api } from '../api/client';
+import { getNotificationPresentation } from '../components/notificationPresentation';
 
 function formatDate(value) {
   if (!value) return 'Date unavailable';
@@ -252,14 +253,18 @@ export function Notifications() {
           ) : notifications.length ? (
             <div className="max-h-[720px] divide-y divide-slate-800 overflow-y-auto">
               {notifications.map((notification) => (
-                <article
-                  key={notification.notification_id}
-                  className={`flex items-start gap-3 p-4 transition hover:bg-slate-800/70 ${isRead(notification) ? '' : 'bg-emerald-500/[0.04]'}`}
-                >
-                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-emerald-300">
-                    {notification.notification_type === 'announcement'
-                      ? <Megaphone className="h-4 w-4" />
-                      : <Bell className="h-4 w-4" />}
+                (() => {
+                  const presentation = getNotificationPresentation(notification);
+                  const Icon = presentation.Icon;
+                  return (
+                    <article
+                      key={notification.notification_id}
+                      className={`flex items-start gap-3 border-l-2 p-4 transition hover:bg-slate-800/70 ${
+                        isRead(notification) ? 'border-l-transparent' : `${presentation.accentClass} ${presentation.unreadClass}`
+                      }`}
+                    >
+                  <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${presentation.iconClass}`}>
+                    <Icon className="h-4 w-4" />
                   </span>
                   <button
                     type="button"
@@ -269,8 +274,11 @@ export function Notifications() {
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-semibold text-white">{notification.title}</h3>
+                      <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${presentation.badgeClass}`}>
+                        {presentation.label}
+                      </span>
                       {!isRead(notification) && (
-                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-300">
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-200">
                           New
                         </span>
                       )}
@@ -293,6 +301,8 @@ export function Notifications() {
                     </button>
                   )}
                 </article>
+                  );
+                })()
               ))}
             </div>
           ) : (

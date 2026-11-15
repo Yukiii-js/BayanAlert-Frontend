@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Bell, Check, Loader2, X } from 'lucide-react';
 import { api } from '../api/client';
+import { getNotificationPresentation } from './notificationPresentation';
 
 function isRead(notification) {
   return [1, '1', true].includes(notification.is_read);
@@ -173,28 +174,42 @@ export function NotificationDropdown({ role = 'resident' }) {
           ) : notifications.length ? (
             <div className="min-h-0 flex-1 divide-y divide-slate-800 overflow-y-auto">
               {notifications.slice(0, 12).map((notification) => (
-                <button
-                  type="button"
-                  key={notification.notification_id}
-                  onClick={() => handleSelect(notification)}
-                  disabled={busyId !== null}
-                  className={`block w-full cursor-pointer px-4 py-3 text-left transition hover:bg-slate-800/80 disabled:cursor-wait disabled:opacity-70 ${
-                    isRead(notification) ? '' : 'bg-emerald-500/[0.04]'
-                  }`}
-                >
-                  <span className="flex items-start justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-bold text-slate-100">{notification.title}</span>
-                      <span className="mt-1 line-clamp-2 block text-[10px] leading-4 text-slate-400">{notification.message}</span>
-                      <span className="mt-1.5 block text-[9px] text-slate-500">{formatDate(notification.created_at)}</span>
-                    </span>
-                    <span className="mt-0.5 shrink-0 text-emerald-300">
-                      {busyId === notification.notification_id
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : isRead(notification) ? null : <Check className="h-4 w-4" />}
-                    </span>
-                  </span>
-                </button>
+                (() => {
+                  const presentation = getNotificationPresentation(notification);
+                  const Icon = presentation.Icon;
+                  return (
+                    <button
+                      type="button"
+                      key={notification.notification_id}
+                      onClick={() => handleSelect(notification)}
+                      disabled={busyId !== null}
+                      className={`flex w-full cursor-pointer items-start gap-3 border-l-2 px-4 py-3 text-left transition hover:bg-slate-800/80 disabled:cursor-wait disabled:opacity-70 ${
+                        isRead(notification) ? 'border-l-transparent' : `${presentation.accentClass} ${presentation.unreadClass}`
+                      }`}
+                    >
+                      <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${presentation.iconClass}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="mb-1 flex items-center gap-1.5">
+                            <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${presentation.badgeClass}`}>
+                              {presentation.label}
+                            </span>
+                            {!isRead(notification) && <span className="h-1.5 w-1.5 rounded-full bg-white/80" aria-label="Unread" />}
+                          </span>
+                          <span className="block truncate text-xs font-bold text-slate-100">{notification.title}</span>
+                          <span className="mt-1 line-clamp-2 block text-[10px] leading-4 text-slate-400">{notification.message}</span>
+                          <span className="mt-1.5 block text-[9px] text-slate-500">{formatDate(notification.created_at)}</span>
+                        </span>
+                        <span className="mt-0.5 shrink-0 text-slate-400">
+                          {busyId === notification.notification_id && <Loader2 className="h-4 w-4 animate-spin" />}
+                          {busyId !== notification.notification_id && !isRead(notification) && <Check className="h-4 w-4 text-emerald-300" />}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })()
               ))}
             </div>
           ) : (

@@ -29,6 +29,7 @@ import { CalapanWeather } from '../components/CalapanWeather';
 import { ExternalAdvisories } from '../components/ExternalAdvisories';
 import { BrandLogo } from '../components/BrandLogo';
 import { NotificationDropdown } from '../components/NotificationDropdown';
+import { getNotificationPresentation } from '../components/notificationPresentation';
 
 const EMPTY_DASHBOARD = {
   reports: [],
@@ -999,15 +1000,22 @@ export function ResidentDashboard() {
           {dashboard.alerts.length ? (
             <div className="space-y-3">
               {dashboard.alerts.map((alert) => (
-                <article key={alert.notification_id} className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-300">
-                    <Bell className="h-4 w-4" />
+                (() => {
+                  const presentation = getNotificationPresentation(alert);
+                  const Icon = presentation.Icon;
+                  return (
+                <article key={alert.notification_id} className={`flex items-start gap-3 rounded-xl border border-slate-800 border-l-2 bg-slate-950/70 p-4 ${presentation.accentClass} ${![1, '1', true].includes(alert.is_read) ? presentation.unreadClass : ''}`}>
+                  <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1 ${presentation.iconClass}`}>
+                    <Icon className="h-4 w-4" />
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-xs font-bold text-white">{alert.title}</h3>
+                      <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${presentation.badgeClass}`}>
+                        {presentation.label}
+                      </span>
                       {![1, '1', true].includes(alert.is_read) && (
-                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-300">New</span>
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-slate-200">New</span>
                       )}
                     </div>
                     <p className="mt-1 text-xs leading-5 text-slate-400">{alert.message}</p>
@@ -1034,6 +1042,8 @@ export function ResidentDashboard() {
                     </button>
                   )}
                 </article>
+                  );
+                })()
               ))}
             </div>
           ) : (
