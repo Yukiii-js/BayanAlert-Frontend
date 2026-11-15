@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
-  ShieldAlert,
   User,
   Lock,
   AlertCircle,
@@ -11,8 +10,11 @@ import {
   EyeOff,
   ArrowLeft,
   LogIn,
+  Mail,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { BrandLogo } from '../components/BrandLogo';
+import { api } from '../api/client';
 
 export function ResidentLogin() {
   const [username, setUsername] = useState('');
@@ -20,8 +22,13 @@ export function ResidentLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotMessage, setForgotMessage] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [isRequestingReset, setIsRequestingReset] = useState(false);
 
-  const { login, logout } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -30,6 +37,7 @@ export function ResidentLogin() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setForgotError('');
 
     if (!username.trim() || !password) {
       setError('Please enter your username or email and password.');
@@ -39,15 +47,7 @@ export function ResidentLogin() {
     setIsSubmitting(true);
 
     try {
-      const user = await login(username.trim(), password);
-
-      // Prevent resident accounts from entering admin pages.
-      const roleName = String(user?.role_name || '').trim().toLowerCase();
-      if (roleName !== 'resident' && roleName !== 'user') {
-        await logout();
-        setError('This login is for resident accounts only.');
-        return;
-      }
+      const user = await login(username.trim(), password, 'resident');
 
       navigate(from.startsWith('/admin') ? '/resident' : from, {
         replace: true,
@@ -59,6 +59,32 @@ export function ResidentLogin() {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function openForgotPassword() {
+    const entered = username.trim();
+    setForgotEmail(entered.includes('@') ? entered : '');
+    setForgotMessage('');
+    setForgotError('');
+    setShowForgotPassword(true);
+  }
+
+  async function handlePasswordResetRequest(event) {
+    event.preventDefault();
+    setForgotError('');
+    setForgotMessage('');
+    setIsRequestingReset(true);
+    try {
+      const response = await api.requestPasswordReset(forgotEmail.trim().toLowerCase());
+      setForgotMessage(
+        response?.message ||
+        'If this email belongs to a verified resident account, a reset link will be sent.'
+      );
+    } catch (err) {
+      setForgotError(err.message || 'Unable to request a password reset right now.');
+    } finally {
+      setIsRequestingReset(false);
     }
   }
 
@@ -82,8 +108,8 @@ export function ResidentLogin() {
 
         {/* Header */}
         <div className="mb-8 text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-xl shadow-emerald-500/20">
-            <ShieldAlert className="h-8 w-8" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+            <BrandLogo className="h-16 w-16" />
           </div>
 
           <h1 className="text-3xl font-extrabold tracking-tight text-white">
@@ -185,7 +211,7 @@ export function ResidentLogin() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-sm font-bold text-slate-950 shadow-md shadow-orange-500/25 transition hover:from-orange-400 hover:to-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>
@@ -200,6 +226,72 @@ export function ResidentLogin() {
               )}
             </button>
           </form>
+
+          <div className="mt-4 text-right">
+            <button
+              type="button"
+              onClick={openForgotPassword}
+              className="text-xs font-semibold text-emerald-300 underline decoration-emerald-500/50 underline-offset-4 hover:text-emerald-200"
+            >
+              Forgot password?
+            </button>
+          </div>
+
+          {showForgotPassword && (
+            <form
+              onSubmit={handlePasswordResetRequest}
+              className="mt-4 space-y-3 rounded-xl border border-slate-700 bg-slate-950/60 p-4"
+            >
+              <div>
+                <label
+                  htmlFor="forgot-password-email"
+                  className="mb-1.5 block text-xs font-semibold text-slate-300"
+                >
+                  Account email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                  <input
+                    id="forgot-password-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(event) => setForgotEmail(event.target.value)}
+                    placeholder="Enter your verified account email"
+                    className={inputClass}
+                  />
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                  Reset links are sent only for verified resident accounts.
+                </p>
+              </div>
+              {forgotError && (
+                <p role="alert" className="text-xs text-rose-300">{forgotError}</p>
+              )}
+              {forgotMessage && (
+                <p role="status" className="text-xs text-emerald-300">{forgotMessage}</p>
+              )}
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  disabled={isRequestingReset}
+                  className="text-xs font-semibold text-slate-400 hover:text-white disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRequestingReset}
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-2 text-xs font-bold text-slate-950 transition hover:from-orange-400 hover:to-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isRequestingReset ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                  {isRequestingReset ? 'Sending...' : 'Send reset link'}
+                </button>
+              </div>
+            </form>
+            )}
 
           <div className="mt-6 border-t border-slate-800 pt-5 text-center">
             <p className="text-sm text-slate-400">

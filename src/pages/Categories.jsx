@@ -121,7 +121,7 @@ export function Categories() {
 
         <button
           onClick={openAddModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition-colors self-start sm:self-auto"
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-md shadow-orange-500/25 transition hover:from-orange-400 hover:to-amber-400 self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
           <span>Add Category</span>
@@ -293,7 +293,7 @@ export function Categories() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 shadow-md shadow-orange-500/25 transition hover:from-orange-400 hover:to-amber-400"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                   <span>Save Category</span>

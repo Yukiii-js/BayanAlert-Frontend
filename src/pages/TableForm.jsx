@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { HazardMap } from '../components/HazardMap';
+import { LocationAutocomplete } from '../components/LocationAutocomplete';
 import { 
   ArrowLeft, 
   Save, 
   Loader2, 
   AlertCircle, 
   CheckCircle,
+  Mail,
   Database,
   Eye,
   EyeOff
@@ -24,6 +27,13 @@ export function TableForm() {
   const [formData, setFormData] = useState({});
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState({});
+  const [notificationPreview, setNotificationPreview] = useState(null);
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [sendDepartmentEmail, setSendDepartmentEmail] = useState(true);
+  const [manualPinSelected, setManualPinSelected] = useState(false);
+  const [locationLookup, setLocationLookup] = useState('');
+  const reverseLookupTimer = useRef(null);
+  const reverseLookupController = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,6 +44,11 @@ export function TableForm() {
           const res = await api.getRecord(table, id);
           setTableInfo(res.data.table_info || {});
           setFields(res.data.fields || []);
+          if (table === 'hazard_reports') {
+            const preview = res.data.notification || null;
+            setNotificationPreview(preview);
+            setNotificationEmail(preview?.default_email || '');
+          }
 
           // Prepopulate form data
           const initial = {};
@@ -42,6 +57,7 @@ export function TableForm() {
             initial[formKey] = f.value ?? (f.default || '');
           });
           setFormData(initial);
+          setManualPinSelected(Boolean(initial.latitude && initial.longitude));
         } else {
           const res = await api.getTableOptions(table);
           setTableInfo(res.data.table_info || {});
@@ -50,9 +66,12 @@ export function TableForm() {
           const initial = {};
           (res.data.fields || []).forEach(f => {
             const formKey = f.form_name || f.name;
-            initial[formKey] = f.default || '';
+            initial[formKey] = formKey === 'severity_level'
+              ? 'moderate'
+              : f.default || '';
           });
           setFormData(initial);
+          setManualPinSelected(false);
         }
       } catch (err) {
         setError(err.message || 'Failed to initialize form.');
@@ -64,11 +83,72 @@ export function TableForm() {
     fetchData();
   }, [table, id, isEdit]);
 
+  useEffect(() => () => {
+    if (reverseLookupTimer.current) window.clearTimeout(reverseLookupTimer.current);
+    reverseLookupController.current?.abort();
+  }, []);
+
   const handleChange = (formName, value) => {
     setFormData(prev => ({
       ...prev,
       [formName]: value
     }));
+  };
+
+  const handleAddressSuggestionSelect = (suggestion) => {
+    setLocationLookup('');
+    setFormData((previous) => ({
+      ...previous,
+      address_details: suggestion.label,
+      ...(!manualPinSelected && suggestion.latitude && suggestion.longitude
+        ? { latitude: suggestion.latitude, longitude: suggestion.longitude }
+        : {}),
+    }));
+  };
+
+  const handleMapLocationSelect = ({ latitude, longitude }) => {
+    setManualPinSelected(true);
+    setLocationLookup('Looking up the selected map location...');
+    setFormData((previous) => ({ ...previous, latitude, longitude }));
+
+    if (reverseLookupTimer.current) window.clearTimeout(reverseLookupTimer.current);
+    reverseLookupController.current?.abort();
+    reverseLookupTimer.current = window.setTimeout(async () => {
+      const controller = new AbortController();
+      reverseLookupController.current = controller;
+      try {
+        const query = new URLSearchParams({
+          format: 'jsonv2',
+          lat: latitude,
+          lon: longitude,
+          zoom: '18',
+          addressdetails: '1',
+        });
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?${query}`,
+          { headers: { 'Accept-Language': 'en' }, signal: controller.signal }
+        );
+        if (!response.ok) {
+          throw new Error(`Address lookup failed (HTTP ${response.status}).`);
+        }
+        const result = await response.json();
+        if (typeof result.display_name !== 'string' || !result.display_name.trim()) {
+          throw new Error('No street address was found for this map point.');
+        }
+        setFormData((previous) => ({
+          ...previous,
+          address_details: result.display_name.trim().slice(0, 255),
+        }));
+        setLocationLookup('');
+      } catch (lookupError) {
+        if (lookupError.name === 'AbortError') return;
+        setLocationLookup('Could not look up this point. Enter the address manually.');
+      } finally {
+        if (reverseLookupController.current === controller) {
+          reverseLookupController.current = null;
+        }
+      }
+    }, 900);
   };
 
   const handleSubmit = async (e) => {
@@ -77,10 +157,28 @@ export function TableForm() {
     setError('');
 
     try {
+      const normalizedFormData = Object.fromEntries(
+        Object.entries(formData).map(([formName, value]) => {
+          const field = fields.find((item) => (item.form_name || item.name) === formName);
+          if (field?.reference && value !== '' && value !== null) {
+            const numericValue = Number(value);
+            return [formName, Number.isInteger(numericValue) ? numericValue : value];
+          }
+          return [formName, value];
+        })
+      );
+
       if (isEdit) {
-        await api.updateRecord(table, id, formData);
+        const updateData = table === 'hazard_reports'
+          ? {
+            ...normalizedFormData,
+            send_department_email: sendDepartmentEmail,
+            department_email: notificationEmail.trim(),
+          }
+          : normalizedFormData;
+        await api.updateRecord(table, id, updateData);
       } else {
-        await api.createRecord(table, formData);
+        await api.createRecord(table, normalizedFormData);
       }
       navigate(`/admin/tables/${table}`, { replace: true });
     } catch (err) {
@@ -98,6 +196,16 @@ export function TableForm() {
       </div>
     );
   }
+
+  const statusValue = String(formData.status || '').trim().toLowerCase();
+  const originalStatus = String(
+    notificationPreview?.report?.status || fields.find((field) => field.name === 'status')?.value || ''
+  ).trim().toLowerCase();
+  const approvalTarget = isEdit
+    && table === 'hazard_reports'
+    && ['approved', 'verified'].includes(statusValue)
+    && !['approved', 'verified'].includes(originalStatus);
+  const previewReport = notificationPreview?.report;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -128,10 +236,89 @@ export function TableForm() {
 
       {/* Form Container */}
       <form onSubmit={handleSubmit} className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl">
+        {approvalTarget && (
+          <section className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <Mail className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-bold text-white">Approval email preview</h2>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  Review the recipient and included report details before approving. The contact is preselected from this hazard category and can be changed.
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-4 flex items-center gap-2 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                checked={sendDepartmentEmail}
+                onChange={(event) => setSendDepartmentEmail(event.target.checked)}
+                className="h-4 w-4 accent-emerald-500"
+              />
+              Send this report by email when approved
+            </label>
+
+            {sendDepartmentEmail && (
+              <>
+                <label htmlFor="department-email" className="mt-4 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+                  Recipient email
+                  {notificationPreview?.department?.name && (
+                    <span className="ml-2 normal-case font-normal text-slate-400">
+                      Auto-selected: {notificationPreview.department.name}
+                    </span>
+                  )}
+                </label>
+                <input
+                  id="department-email"
+                  type="email"
+                  required
+                  value={notificationEmail}
+                  onChange={(event) => setNotificationEmail(event.target.value)}
+                  placeholder="Choose the department or contact email"
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+
+                <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300">
+                  <p className="font-semibold text-slate-100">
+                    {previewReport?.reference_number || `Report #${id}`} · {previewReport?.title || 'Hazard report'}
+                  </p>
+                  <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {[
+                      ['Category', previewReport?.category_name],
+                      ['Location', previewReport?.address_details],
+                      ['Reporter', previewReport?.reporter_name],
+                      ['Reported at', previewReport?.submitted_at],
+                      ['Coordinates', previewReport?.latitude != null && previewReport?.longitude != null
+                        ? `${previewReport.latitude}, ${previewReport.longitude}`
+                        : 'Not provided'],
+                      ['Severity', previewReport?.severity_level || 'Not specified'],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <dt className="text-[10px] uppercase tracking-wide text-slate-500">{label}</dt>
+                        <dd className="mt-0.5 break-words text-slate-300">{value || 'Not provided'}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="mt-2 whitespace-pre-wrap text-slate-400">
+                    {previewReport?.description || 'No description provided.'}
+                  </p>
+                  <p className="mt-2 text-[10px] text-slate-500">
+                    Attached media links: {previewReport?.media?.length || 0}
+                  </p>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
         <div className="space-y-5">
           {fields.map((field) => {
             const formKey = field.form_name || field.name;
-            const isRequired = !field.nullable && field.default === null && !field.password;
+            if (table === 'hazard_reports' && ['latitude', 'longitude'].includes(formKey)) {
+              return null;
+            }
+            const isRequired = (table === 'hazard_reports' && formKey === 'severity_level')
+              || (!field.nullable && field.default === null && !field.password);
             const hasOptions = Array.isArray(field.options) && field.options.length > 0;
             const hasEnum = Array.isArray(field.enum) && field.enum.length > 0;
             const isTextarea = field.type.includes('text') || field.type.includes('blob');
@@ -169,6 +356,26 @@ export function TableForm() {
                       {showPassword[formKey] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                ) : table === 'hazard_reports' && formKey === 'address_details' ? (
+                  <LocationAutocomplete
+                    id="admin-hazard-address"
+                    value={formData[formKey] ?? ''}
+                    onChange={(event) => handleChange(formKey, event.target.value)}
+                    onSelect={handleAddressSuggestionSelect}
+                    required={isRequired}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                ) : table === 'hazard_reports' && formKey === 'severity_level' ? (
+                  <select
+                    value={formData[formKey] ?? ''}
+                    onChange={(event) => handleChange(formKey, event.target.value)}
+                    required={isRequired}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm capitalize text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  >
+                    {['low', 'moderate', 'high', 'critical'].map((severity) => (
+                      <option key={severity} value={severity}>{severity}</option>
+                    ))}
+                  </select>
                 ) : hasOptions ? (
                   /* Foreign Key Reference Select */
                   <select
@@ -230,6 +437,33 @@ export function TableForm() {
           })}
         </div>
 
+        {table === 'hazard_reports' && (
+          <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">Report location</h2>
+              <p className="mt-1 text-[10px] text-slate-500">
+                Search for a barangay or address, or click and drag the map pin. Coordinates are saved automatically.
+              </p>
+            </div>
+            <HazardMap
+              selectable
+              height="h-[320px]"
+              selectedLocation={formData.latitude && formData.longitude
+                ? { latitude: formData.latitude, longitude: formData.longitude }
+                : null}
+              centerOnSelectedLocation={!manualPinSelected}
+              onLocationSelect={handleMapLocationSelect}
+            />
+            <p className={`text-[10px] ${locationLookup.startsWith('Could not') ? 'text-amber-300' : 'text-slate-400'}`}>
+              {locationLookup || (
+                formData.latitude && formData.longitude
+                  ? `Selected: ${formData.latitude}, ${formData.longitude}`
+                  : 'No map point selected. A location pin is optional.'
+              )}
+            </p>
+          </section>
+        )}
+
         {/* Form Actions */}
         <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
           <Link
@@ -241,7 +475,7 @@ export function TableForm() {
           <button
             type="submit"
             disabled={submitting}
-            className="px-6 py-2.5 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2"
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-2.5 text-sm font-semibold text-slate-950 shadow-md shadow-orange-500/25 transition hover:from-orange-400 hover:to-amber-400"
           >
             {submitting ? (
               <>
