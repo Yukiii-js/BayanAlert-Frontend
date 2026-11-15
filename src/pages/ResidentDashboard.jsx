@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -9,6 +9,7 @@ import {
   Clock3,
   Eye,
   FileWarning,
+  FileText,
   Loader2,
   LogOut,
   MapPin,
@@ -196,6 +197,8 @@ export function ResidentDashboard() {
   const [showReportPrompt, setShowReportPrompt] = useState(
     () => localStorage.getItem(REPORT_PROMPT_SEEN_KEY) !== '1'
   );
+  const knownAlertIds = useRef(null);
+  const [alertToast, setAlertToast] = useState(null);
 
   async function loadDashboard(showLoader = true) {
     if (showLoader) setLoading(true);
@@ -235,6 +238,48 @@ export function ResidentDashboard() {
     loadDashboard();
     const timer = window.setInterval(() => loadDashboard(false), 60000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadAlerts() {
+      try {
+        const response = await api.getNotifications();
+        const alerts = response?.data?.notifications;
+        if (!Array.isArray(alerts)) {
+          throw new Error('The notifications response was invalid.');
+        }
+        if (!active) return;
+
+        setNotificationError('');
+        const externalAlerts = alerts.filter((alert) => alert.notification_type === 'external_hazard');
+        const newAlert = knownAlertIds.current === null
+          ? externalAlerts.find((alert) => {
+              const createdAt = new Date(String(alert.created_at || '').replace(' ', 'T')).getTime();
+              return ![1, '1', true].includes(alert.is_read) &&
+                Number.isFinite(createdAt) &&
+                Date.now() - createdAt < 5 * 60 * 1000;
+            })
+          : externalAlerts.find((alert) => (
+              !knownAlertIds.current.has(String(alert.notification_id)) &&
+              ![1, '1', true].includes(alert.is_read)
+            ));
+        if (newAlert) setAlertToast(newAlert);
+        knownAlertIds.current = new Set(alerts.map((alert) => String(alert.notification_id)));
+        setDashboard((current) => ({ ...current, alerts }));
+      } catch (requestError) {
+        if (active) {
+          setNotificationError(requestError.message || 'Unable to refresh notifications.');
+        }
+      }
+    }
+
+    loadAlerts();
+    const timer = window.setInterval(loadAlerts, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, []);
 
   const categories = useMemo(
@@ -304,6 +349,16 @@ export function ResidentDashboard() {
       }));
     } catch (requestError) {
       setNotificationError(requestError.message || 'Unable to mark this alert as read.');
+    }
+  }
+
+  function viewAlert(alert) {
+    if (![1, '1', true].includes(alert.is_read)) {
+      markAlertRead(alert);
+    }
+    setAlertToast(null);
+    if (alert.notification_type === 'external_hazard') {
+      scrollToSection('regional-advisories');
     }
   }
 
@@ -431,7 +486,7 @@ export function ResidentDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-slate-700/80 bg-slate-900/80 shadow-lg shadow-black/20 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 border-b border-slate-700/80 bg-slate-900/80 shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur-xl after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-orange-500/40 after:to-transparent">
         <div className="mx-auto flex min-h-[64px] max-w-[1500px] items-center justify-between gap-3 px-4 lg:px-7">
           <Link to="/resident" className="flex shrink-0 items-center gap-2.5">
             <span className="flex h-10 w-10 items-center justify-center">
@@ -445,7 +500,7 @@ export function ResidentDashboard() {
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-1 lg:flex">
+          <nav className="hidden items-center gap-1 xl:flex">
             {navItems.slice(0, 2).map(({ label, id, icon: Icon }) => (
               <button
                 key={id}
@@ -478,6 +533,18 @@ export function ResidentDashboard() {
             >
               <PlusCircle className="h-4 w-4" />
               Submit Reports
+            </Link>
+            <Link
+              to="/resident/report-history"
+              aria-current={location.pathname === '/resident/report-history' ? 'page' : undefined}
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                location.pathname === '/resident/report-history'
+                  ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Report History
             </Link>
             {navItems.slice(2).map(({ label, id, icon: Icon }) => (
               <button
@@ -516,7 +583,7 @@ export function ResidentDashboard() {
             </button>
           </div>
         </div>
-        <nav className="grid grid-cols-2 gap-1 border-t border-slate-800 px-3 py-2 lg:hidden">
+        <nav className="grid grid-cols-2 gap-1 border-t border-slate-800 px-3 py-2 xl:hidden">
           {navItems.slice(0, 2).map(({ label, id, icon: Icon }) => (
             <button
               key={id}
@@ -547,6 +614,18 @@ export function ResidentDashboard() {
           >
             <PlusCircle className="h-3.5 w-3.5" />
             Submit Reports
+          </Link>
+          <Link
+            to="/resident/report-history"
+            aria-current={location.pathname === '/resident/report-history' ? 'page' : undefined}
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold ${
+              location.pathname === '/resident/report-history'
+                ? 'bg-emerald-600 text-white'
+                : 'text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Report History
           </Link>
           {navItems.slice(2).map(({ label, id, icon: Icon }) => (
             <button
@@ -904,6 +983,15 @@ export function ResidentDashboard() {
                     </div>
                     <p className="mt-1 text-xs leading-5 text-slate-400">{alert.message}</p>
                     <p className="mt-2 text-[10px] text-slate-500">{formatDate(alert.created_at)}</p>
+                    {alert.notification_type === 'external_hazard' && (
+                      <button
+                        type="button"
+                        onClick={() => viewAlert(alert)}
+                        className="mt-3 text-[10px] font-bold text-orange-300 transition hover:text-orange-200"
+                      >
+                        View regional advisory
+                      </button>
+                    )}
                   </div>
                   {![1, '1', true].includes(alert.is_read) && (
                     <button
@@ -928,6 +1016,29 @@ export function ResidentDashboard() {
           )}
         </section>
       </main>
+      {alertToast && (
+        <div role="status" className="fixed bottom-4 right-4 z-[1100] w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-orange-400/30 bg-slate-900 p-4 shadow-2xl shadow-black/40">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-300">
+              <ShieldAlert className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-white">{alertToast.title}</p>
+              <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-400">{alertToast.message}</p>
+              <button
+                type="button"
+                onClick={() => viewAlert(alertToast)}
+                className="mt-3 text-[10px] font-bold text-orange-300 hover:text-orange-200"
+              >
+                View regional advisories
+              </button>
+            </div>
+            <button type="button" onClick={() => setAlertToast(null)} aria-label="Dismiss hazard alert" className="rounded-lg p-1 text-slate-500 hover:bg-slate-800 hover:text-white">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {showReportPrompt && (
         <ResidentReportPrompt onDismiss={() => setShowReportPrompt(false)} />
@@ -1044,7 +1155,7 @@ export function ResidentDashboard() {
         </div>
       )}
 
-      <footer className="border-t border-slate-800 bg-slate-900/40 px-4 py-5 text-center text-[10px] text-slate-500">
+      <footer className="relative border-t border-slate-800 bg-slate-900/40 px-4 py-5 text-center text-[10px] text-slate-500 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-orange-500/35 before:to-transparent">
         BayanAlert · Live data from the community reporting database
       </footer>
     </div>

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { HazardMap } from '../components/HazardMap';
 import { CalapanWeather } from '../components/CalapanWeather';
+import { ExternalAdvisories } from '../components/ExternalAdvisories';
 
 function formatReportDate(value) {
   if (!value) return 'Date unavailable';
@@ -245,6 +246,7 @@ export function Dashboard() {
             A live operational view of BayanAlert data. Choose a register to review, add, or update records.
           </p>
         </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs text-slate-500">
             {lastUpdated
@@ -269,6 +271,8 @@ export function Dashboard() {
           </Link>
         </div>
       </div>
+
+      <ExternalAdvisories />
 
       {refreshError && (
         <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">

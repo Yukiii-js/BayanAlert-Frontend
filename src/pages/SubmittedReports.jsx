@@ -20,7 +20,7 @@ import {
   CheckCircle,
   RefreshCw,
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, publicFileUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { HazardMap } from '../components/HazardMap';
 import { BrandLogo } from '../components/BrandLogo';
@@ -56,6 +56,7 @@ function statusStyle(status) {
   const styles = {
     pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
     verified: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    disputed: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
     assigned: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
     in_progress: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300',
     resolved: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
@@ -107,7 +108,7 @@ function normalizeReport(report) {
   };
 }
 
-export default function SubmittedReports() {
+export default function SubmittedReports({ view = 'submit' }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -235,10 +236,11 @@ export default function SubmittedReports() {
   }
 
   useEffect(() => {
+    if (view === 'history') return;
     if (!location.state?.openCreateReport) return;
     openCreateForm();
     navigate(location.pathname, { replace: true, state: null });
-  }, [location.key, location.pathname, location.state, navigate]);
+  }, [location.key, location.pathname, location.state, navigate, view]);
 
   function openEditForm(report) {
     if (!canEdit(report)) {
@@ -475,19 +477,25 @@ export default function SubmittedReports() {
       icon: PlusCircle,
       state: { openCreateReport: true },
     },
+    { label: 'Report History', to: '/resident/report-history', icon: FileText },
+    { label: 'Regional Advisories', to: '/resident#regional-advisories', icon: Activity },
     { label: 'Alerts', to: '/resident#alerts', icon: Bell },
   ];
-  const activeTab = location.pathname === '/resident/submitted-reports'
-    ? 'Submit Reports'
+  const activeTab = location.pathname === '/resident/report-history'
+    ? 'Report History'
+    : location.pathname === '/resident/submitted-reports'
+      ? 'Submit Reports'
     : location.hash === '#incident-feed'
       ? 'Incident Feed'
+      : location.hash === '#regional-advisories'
+        ? 'Regional Advisories'
       : location.hash === '#alerts'
         ? 'Alerts'
         : 'Dashboard';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-slate-700/80 bg-slate-900/80 text-white shadow-lg shadow-black/20 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 border-b border-slate-700/80 bg-slate-900/80 text-white shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur-xl after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-orange-500/40 after:to-transparent">
         <div className="mx-auto flex min-h-[64px] max-w-[1500px] items-center justify-between gap-3 px-4 lg:px-7">
           <Link to="/resident" className="flex shrink-0 items-center gap-2.5">
             <span className="flex h-10 w-10 items-center justify-center">
@@ -501,7 +509,7 @@ export default function SubmittedReports() {
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-1 lg:flex">
+          <nav className="hidden items-center gap-1 xl:flex">
             {navItems.map(({ label, to, icon: Icon, state }) => (
               <Link
                 key={label}
@@ -530,7 +538,7 @@ export default function SubmittedReports() {
           </button>
         </div>
 
-        <nav className="grid grid-cols-2 gap-1 border-t border-slate-800 px-3 py-2 lg:hidden">
+        <nav className="grid grid-cols-2 gap-1 border-t border-slate-800 px-3 py-2 xl:hidden">
           {navItems.map(({ label, to, icon: Icon, state }) => (
             <Link
               key={label}
@@ -551,20 +559,30 @@ export default function SubmittedReports() {
       </header>
 
       <main className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-7">
-        <section>
+        <section className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
               Resident Portal
             </p>
             <h1 className="text-2xl font-extrabold text-white">
-              My Submitted Reports
+              {view === 'history' ? 'Report History' : 'Submit a Hazard Report'}
             </h1>
             <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">
-              Create reports, update pending submissions, attach evidence, and
-              track report status.
+              {view === 'history'
+                ? 'Review report status, submitted evidence, locations, and response-team remarks.'
+                : 'Share incident details, location, and evidence with the response team.'}
             </p>
           </div>
-
+          {view === 'submit' && !showForm && (
+            <button
+              type="button"
+              onClick={openCreateForm}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500"
+            >
+              <PlusCircle className="h-4 w-4" />
+              Create report
+            </button>
+          )}
         </section>
 
         {successMessage && (
@@ -595,7 +613,7 @@ export default function SubmittedReports() {
         )}
 
         {/* Summary cards */}
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {view === 'history' && <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
             { label: 'My Reports', count: summary.total, color: 'text-emerald-300', icon: FileText },
             { label: 'Pending', count: summary.pending, color: 'text-amber-300', icon: Clock },
@@ -610,7 +628,7 @@ export default function SubmittedReports() {
               <p className={`mt-2 text-2xl font-extrabold ${color}`}>{count}</p>
             </div>
           ))}
-        </section>
+        </section>}
 
         {/* Create/edit form */}
         {showForm && (
@@ -847,7 +865,7 @@ export default function SubmittedReports() {
         )}
 
         {/* Reports list */}
-        <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 shadow-xl shadow-black/10">
+        {view === 'history' && <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 shadow-xl shadow-black/10">
           <div className="border-b border-slate-800 p-4 sm:p-5">
             <h2 className="text-sm font-extrabold text-white">
               Report History
@@ -956,19 +974,19 @@ export default function SubmittedReports() {
               <p className="mt-1 text-xs text-slate-400">
                 Try changing your search or status filter, or create a new report.
               </p>
-              <button
-                type="button"
-                onClick={openCreateForm}
+              <Link
+                to="/resident/submitted-reports"
+                state={{ openCreateReport: true }}
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500"
               >
                 <PlusCircle className="h-4 w-4" />
                 Create Report
-              </button>
+              </Link>
             </div>
           )}
-        </section>
+        </section>}
 
-        <footer className="py-3 text-center text-[10px] text-slate-500">
+        <footer className="relative py-3 text-center text-[10px] text-slate-500 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-orange-500/35 before:to-transparent">
           BayanAlert · Community Hazard Reporting and Verification System
         </footer>
       </main>
@@ -1017,9 +1035,13 @@ export default function SubmittedReports() {
                 ['Category', selectedReport.category_name],
                 ['Station', selectedReport.station_name],
                 ['Location', selectedReport.address_details],
+                ['Coordinates', selectedReport.latitude != null && selectedReport.longitude != null
+                  ? `${selectedReport.latitude}, ${selectedReport.longitude}`
+                  : null],
                 ['Submitted', formatDate(selectedReport.submitted_at)],
+                ['Admin remarks', selectedReport.admin_remarks || selectedReport.verification_remarks || selectedReport.remarks],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                value && <div key={label} className="rounded-lg border border-slate-800 bg-slate-950 p-3">
                   <p className="text-[10px] text-slate-500">{label}</p>
                   <p className="mt-1 break-words text-xs font-semibold text-slate-200">
                     {value || 'Not provided'}
@@ -1053,13 +1075,24 @@ export default function SubmittedReports() {
                       {selectedReport.evidence.map((item, index) => (
                         <div
                           key={item.evidence_id || index}
-                          className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300"
+                          className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300"
                         >
-                          <FileText className="h-4 w-4 shrink-0 text-emerald-400" />
-                          <span className="break-all">
-                            {item.file_path?.split('/').pop() ||
-                              `Evidence ${index + 1}`}
+                          <span className="flex min-w-0 items-center gap-2">
+                            <FileText className="h-4 w-4 shrink-0 text-emerald-400" />
+                            <span className="break-all">
+                              {item.file_path?.split('/').pop() || `Evidence ${index + 1}`}
+                            </span>
                           </span>
+                          {publicFileUrl(item.file_path) && (
+                            <a
+                              href={publicFileUrl(item.file_path)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="shrink-0 rounded-md px-2 py-1 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/10"
+                            >
+                              Open
+                            </a>
+                          )}
                         </div>
                       ))}
                     </div>

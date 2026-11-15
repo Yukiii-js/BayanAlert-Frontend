@@ -8,7 +8,8 @@ import {
   LogOut, 
   User, 
   Bell,
-  FileText
+  FileText,
+  PlugZap,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { BrandLogo } from './BrandLogo';
@@ -55,11 +56,11 @@ export function Layout({ children }) {
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
       {/* Top Navigation Bar */}
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+      <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/80 shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-orange-500/40 after:to-transparent">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link to="/admin" className="flex items-center gap-2.5 group">
-              <div className="flex h-10 w-10 items-center justify-center transition-transform group-hover:scale-105">
+              <div className="flex h-10 w-10 items-center justify-center drop-shadow-[0_0_14px_rgba(249,115,22,0.16)] transition-transform group-hover:scale-105">
                 <BrandLogo className="h-10 w-10" />
               </div>
               <div>
@@ -72,7 +73,7 @@ export function Layout({ children }) {
               </div>
             </Link>
 
-            <nav className="hidden md:flex items-center gap-1">
+            <nav className="hidden max-w-[calc(100vw-24rem)] items-center gap-1 overflow-x-auto md:flex xl:max-w-none">
               <NavLink
                 to="/admin"
                 end
@@ -114,6 +115,20 @@ export function Layout({ children }) {
               >
                 <Tags className="w-4 h-4" />
                 Hazard Categories
+              </NavLink>
+
+              <NavLink
+                to="/admin/api-management"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-orange-500/10 text-orange-300 border border-orange-500/20'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`
+                }
+              >
+                <PlugZap className="w-4 h-4" />
+                API Management
               </NavLink>
 
               <NavLink
@@ -191,7 +206,7 @@ export function Layout({ children }) {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-900/30 py-6 text-center text-xs text-slate-500">
+      <footer className="relative border-t border-slate-800/80 bg-slate-900/30 py-6 text-center text-xs text-slate-500 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-orange-500/35 before:to-transparent">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>&copy; {new Date().getFullYear()} BayanAlert &bull; Decoupled Architecture (LavaLust API + React)</span>
           <span className="text-slate-600">Secure Emergency Incident Management</span>

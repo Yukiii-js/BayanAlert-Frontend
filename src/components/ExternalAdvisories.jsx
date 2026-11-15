@@ -15,7 +15,7 @@ const SOURCES = [
   {
     id: 'typhoons',
     label: 'Typhoons',
-    providerId: 'gdacs',
+    providerId: 'typhoon',
     icon: CloudLightning,
     heading: 'Typhoon advisories',
     description: 'GDACS tropical cyclone alerts for the Philippines and nearby region.',
@@ -177,6 +177,7 @@ function EventCard({ event }) {
               </span>
             )}
             {location && <span>{location}</span>}
+            {event.affected_area && <span>Area: {event.affected_area}</span>}
           </div>
         </div>
         {typeof event.event_url === 'string' && /^https?:\/\//i.test(event.event_url) && (
@@ -352,6 +353,11 @@ export function ExternalAdvisories() {
             <span>{error}</span>
           </div>
         )}
+        {feed?.warnings?.map((warning) => (
+          <div key={warning} role="status" className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">
+            {warning}
+          </div>
+        ))}
 
         {provider?.status === 'error' && !loading && (
           <div role="status" className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">

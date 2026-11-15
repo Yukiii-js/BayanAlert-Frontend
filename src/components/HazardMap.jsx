@@ -17,6 +17,54 @@ const STATUS_COLORS = {
   assigned: '#38bdf8',
   in_progress: '#818cf8',
 };
+const BARANGAY_DATA_URL = '/data/calapan_barangays.geojson';
+
+function getBarangayName(feature) {
+  const properties = feature?.properties || {};
+  const name = Object.entries(properties).find(([key, value]) => (
+    typeof value === 'string' &&
+    value.trim() &&
+    /^(adm4_name\d*|adm4_en|name_4|name|barangay)$/i.test(key)
+  ))?.[1];
+  return name || 'Barangay';
+}
+
+function isCalapanBarangay(feature) {
+  const properties = feature?.properties || {};
+  const municipalityCode = String(properties.adm3_pcode || '').trim();
+  if (municipalityCode === 'PH1705205') return true;
+
+  return Object.entries(properties).some(([key, value]) => (
+    /^adm3_name\d*$/i.test(key) &&
+    typeof value === 'string' &&
+    /^(?:city of )?calapan(?: city)?(?:\s*\(capital\))?$/i.test(value.trim())
+  ));
+}
+
+function hasValidRegionalGeometry(geometry) {
+  if (!geometry || !['Polygon', 'MultiPolygon'].includes(geometry.type)) return false;
+  let hasRegionalCoordinate = false;
+  let hasInvalidCoordinate = false;
+
+  function visit(value) {
+    if (!Array.isArray(value)) return;
+    if (value.length >= 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])) {
+      const [longitude, latitude] = value;
+      if (Math.abs(longitude) > 180 || Math.abs(latitude) > 90) {
+        hasInvalidCoordinate = true;
+        return;
+      }
+      if (longitude >= 120.5 && longitude <= 122 && latitude >= 12.5 && latitude <= 14.5) {
+        hasRegionalCoordinate = true;
+      }
+      return;
+    }
+    value.forEach(visit);
+  }
+
+  visit(geometry.coordinates);
+  return hasRegionalCoordinate && !hasInvalidCoordinate;
+}
 
 function markerIcon(status) {
   const color = STATUS_COLORS[String(status || '').toLowerCase()] || '#94a3b8';
@@ -60,14 +108,17 @@ export function HazardMap({
   const mapInstance = useRef(null);
   const markerLayer = useRef(null);
   const selectionLayer = useRef(null);
+  const barangayLayer = useRef(null);
   const hasFittedReports = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapData, setMapData] = useState({ reports: [], categories: [], coordinates_available: false });
   const [externalLayerState, setExternalLayerState] = useState({
-    hdx: true,
+    hdx: false,
     weather: true,
   });
   const [externalLayersOpen, setExternalLayersOpen] = useState(false);
+  const [hdxStatus, setHdxStatus] = useState('loading');
+  const [hdxError, setHdxError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -137,8 +188,102 @@ export function HazardMap({
       mapInstance.current = null;
       markerLayer.current = null;
       selectionLayer.current = null;
+      barangayLayer.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || !mapReady || selectable) return undefined;
+    let active = true;
+
+    async function loadBarangayBoundaries() {
+      setHdxStatus('loading');
+      setHdxError('');
+      try {
+        const response = await fetch(BARANGAY_DATA_URL, { cache: 'force-cache' });
+        if (!response.ok) {
+          throw new Error(`The regional barangay GeoJSON returned HTTP ${response.status}.`);
+        }
+        const collection = await response.json();
+        if (collection?.type !== 'FeatureCollection' || !Array.isArray(collection.features)) {
+          throw new Error('The barangay boundary file is not a valid GeoJSON FeatureCollection.');
+        }
+
+        const features = collection.features.filter((feature) => (
+          feature?.type === 'Feature' &&
+          isCalapanBarangay(feature) &&
+          hasValidRegionalGeometry(feature.geometry)
+        ));
+        if (!features.length) {
+          throw new Error('The boundary dataset has no valid Calapan City barangay polygons.');
+        }
+
+        if (!active) return;
+        if (!map.getPane('barangayBoundaries')) {
+          const pane = map.createPane('barangayBoundaries');
+          pane.style.zIndex = '390';
+        }
+        barangayLayer.current = L.geoJSON(
+          { type: 'FeatureCollection', features },
+          {
+            pane: 'barangayBoundaries',
+            style: {
+              color: '#f97316',
+              weight: 1,
+              opacity: 0.85,
+              fillColor: '#f97316',
+              fillOpacity: 0.045,
+            },
+            onEachFeature(feature, layer) {
+              const name = getBarangayName(feature);
+              layer.bindTooltip(name, { sticky: true, direction: 'top' });
+              const popup = document.createElement('div');
+              popup.className = 'hazard-map-popup';
+              const heading = document.createElement('strong');
+              heading.textContent = name;
+              popup.appendChild(heading);
+              const area = document.createElement('span');
+              area.textContent = 'Calapan City · Oriental Mindoro';
+              popup.appendChild(area);
+              layer.bindPopup(popup);
+              layer.on({
+                mouseover() {
+                  layer.setStyle({ weight: 2, fillOpacity: 0.14 });
+                },
+                mouseout() {
+                  barangayLayer.current?.resetStyle(layer);
+                },
+              });
+            },
+          }
+        );
+        setHdxStatus('available');
+        setExternalLayerState((current) => ({ ...current, hdx: true }));
+      } catch (loadError) {
+        if (!active) return;
+        setHdxStatus('unavailable');
+        setHdxError(loadError.message || 'Barangay boundaries could not be loaded.');
+      }
+    }
+
+    loadBarangayBoundaries();
+    return () => {
+      active = false;
+      if (barangayLayer.current) {
+        map.removeLayer(barangayLayer.current);
+        barangayLayer.current = null;
+      }
+    };
+  }, [mapReady, selectable]);
+
+  useEffect(() => {
+    const map = mapInstance.current;
+    const layer = barangayLayer.current;
+    if (!map || !layer || hdxStatus !== 'available') return;
+    if (externalLayerState.hdx) layer.addTo(map);
+    else map.removeLayer(layer);
+  }, [externalLayerState.hdx, hdxStatus, mapReady]);
 
   useEffect(() => {
     const map = mapInstance.current;
@@ -216,7 +361,7 @@ export function HazardMap({
     ['disputed', 'Disputed'],
   ];
   const externalToggleCount = [
-    externalLayerState.hdx,
+    hdxStatus === 'available' && externalLayerState.hdx,
     Boolean(weather?.current && externalLayerState.weather),
   ].filter(Boolean).length;
 
@@ -278,18 +423,29 @@ export function HazardMap({
               <div className="mt-2 w-56 rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl">
                 {[
                   ...(weather?.current ? [['weather', 'Live weather animation']] : []),
-                  ['hdx', 'HDX Barangay Boundaries & Exposure'],
+                  ['hdx', hdxStatus === 'available' ? 'HDX barangay boundaries' : 'HDX barangay boundaries'],
                 ].map(([key, label]) => (
                   <label key={key} className="mb-2 flex cursor-pointer items-center justify-between gap-3 text-[11px] text-slate-200 last:mb-0">
                     <span>{label}</span>
                     <input
                       type="checkbox"
                       checked={Boolean(externalLayerState[key])}
+                      disabled={key === 'hdx' && hdxStatus !== 'available'}
+                      title={key === 'hdx' && hdxStatus !== 'available' ? hdxError || 'Loading the regional boundary dataset.' : undefined}
                       onChange={() => setExternalLayerState((current) => ({ ...current, [key]: !current[key] }))}
                       className="h-4 w-4 accent-emerald-500"
                     />
                   </label>
                 ))}
+                <p className={`mt-2 border-t border-slate-800 pt-2 text-[9px] leading-4 ${
+                  hdxStatus === 'available' ? 'text-emerald-200/80' : 'text-amber-200/80'
+                }`}>
+                  {hdxStatus === 'loading'
+                    ? 'Loading the Calapan-only HDX boundary dataset…'
+                    : hdxStatus === 'available'
+                      ? 'UN OCHA HDX · COD-AB PHL · Regional GeoJSON'
+                      : hdxError || 'Regional boundary data is unavailable.'}
+                </p>
               </div>
             )}
           </div>
@@ -306,6 +462,12 @@ export function HazardMap({
                   {label}
                 </p>
               ))}
+              {hdxStatus === 'available' && externalLayerState.hdx && (
+                <p className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 border border-orange-400 bg-orange-400/20" />
+                  Barangay boundary
+                </p>
+              )}
             </div>
           </div>
         )}

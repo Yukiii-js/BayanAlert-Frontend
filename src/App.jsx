@@ -14,6 +14,7 @@ import { VerifyEmail } from './pages/VerifyEmail';
 import { ResidentLogin } from './pages/ResidentLogin';
 import SubmittedReports from './pages/SubmittedReports';
 import { Notifications } from './pages/Notifications';
+import { APIManagement } from './pages/APIManagement';
 
 const ResidentDashboard = lazy(() => import('./pages/ResidentDashboard').then((module) => ({
   default: module.ResidentDashboard,
@@ -60,6 +61,15 @@ export default function App() {
             }
           />
 
+          <Route
+            path="/resident/report-history"
+            element={
+              <ProtectedRoute allowedRoles={['resident', 'user']}>
+                <SubmittedReports view="history" />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
 
@@ -81,6 +91,17 @@ export default function App() {
               <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <Notifications />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/api-management"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <APIManagement />
                 </Layout>
               </ProtectedRoute>
             }

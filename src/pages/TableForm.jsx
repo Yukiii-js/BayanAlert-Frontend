@@ -86,17 +86,28 @@ export function TableForm() {
     setError('');
 
     try {
+      const normalizedFormData = Object.fromEntries(
+        Object.entries(formData).map(([formName, value]) => {
+          const field = fields.find((item) => (item.form_name || item.name) === formName);
+          if (field?.reference && value !== '' && value !== null) {
+            const numericValue = Number(value);
+            return [formName, Number.isInteger(numericValue) ? numericValue : value];
+          }
+          return [formName, value];
+        })
+      );
+
       if (isEdit) {
         const updateData = table === 'hazard_reports'
           ? {
-            ...formData,
+            ...normalizedFormData,
             send_department_email: sendDepartmentEmail,
             department_email: notificationEmail.trim(),
           }
-          : formData;
+          : normalizedFormData;
         await api.updateRecord(table, id, updateData);
       } else {
-        await api.createRecord(table, formData);
+        await api.createRecord(table, normalizedFormData);
       }
       navigate(`/admin/tables/${table}`, { replace: true });
     } catch (err) {

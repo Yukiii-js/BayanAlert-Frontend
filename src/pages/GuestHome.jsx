@@ -30,7 +30,7 @@ export function GuestHome() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Navigation */}
-      <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur-xl after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-orange-500/40 after:to-transparent">
         <div className="mx-auto flex min-h-[76px] max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
 
           <Link to="/" className="flex shrink-0 items-center gap-3">
@@ -449,7 +449,7 @@ export function GuestHome() {
         </section>
 
         {/* Footer */}
-        <footer className="flex flex-col gap-4 border-t border-slate-800 py-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+        <footer className="relative flex flex-col gap-4 border-t border-slate-800 py-6 text-xs text-slate-500 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-orange-500/35 before:to-transparent sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <BrandLogo className="h-8 w-8" />
             <span>
