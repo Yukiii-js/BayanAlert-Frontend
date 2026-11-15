@@ -507,7 +507,12 @@ export function APIManagement() {
               </label>
               <label className="space-y-1.5 text-xs font-semibold text-slate-300 sm:col-span-2">
                 Custom Parameters (JSON object)
-                <textarea rows={4} value={form.custom_parameters_json} onChange={(event) => setForm((current) => ({ ...current, custom_parameters_json: event.target.value }))} placeholder={'{"limit": 10}'} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-xs text-white outline-none focus:border-orange-400" />
+                <textarea rows={4} value={form.custom_parameters_json} onChange={(event) => setForm((current) => ({ ...current, custom_parameters_json: event.target.value }))} placeholder={editingApi?.api_key === 'reliefweb' ? '{"appname":"your-approved-appname"}' : '{"limit": 10}'} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-xs text-white outline-none focus:border-orange-400" />
+                {editingApi?.api_key === 'reliefweb' && (
+                  <span className="block font-normal leading-5 text-amber-300">
+                    ReliefWeb requires an approved appname. Request one from ReliefWeb and set it here before testing.
+                  </span>
+                )}
               </label>
             </div>
             {formError && (
