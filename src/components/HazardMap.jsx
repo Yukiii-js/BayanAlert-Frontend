@@ -268,6 +268,8 @@ export function HazardMap({
   const hasFittedReports = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapData, setMapData] = useState({ reports: [], categories: [], coordinates_available: false });
+  const [localWeather, setLocalWeather] = useState(null);
+  const [weatherLayerError, setWeatherLayerError] = useState('');
   const [externalLayerState, setExternalLayerState] = useState({
     hdx: true,
     weather: true,
@@ -283,6 +285,7 @@ export function HazardMap({
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const mapWeather = weather?.current ? weather : localWeather;
 
   async function loadMapData() {
     setLoading(true);
@@ -306,6 +309,34 @@ export function HazardMap({
     const timer = window.setInterval(loadMapData, 60000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!selectable || weather?.current) return undefined;
+    let active = true;
+
+    async function loadWeather() {
+      try {
+        const response = await api.getCalapanWeather();
+        const result = response?.data;
+        if (!result?.current) {
+          throw new Error('The Calapan weather response did not include current conditions.');
+        }
+        if (active) {
+          setLocalWeather(result);
+          setWeatherLayerError('');
+        }
+      } catch (loadError) {
+        if (active) {
+          setWeatherLayerError(loadError.message || 'Weather animation data is unavailable.');
+        }
+      }
+    }
+
+    loadWeather();
+    return () => {
+      active = false;
+    };
+  }, [selectable, weather]);
 
   useEffect(() => {
     if (!mapElement.current || mapInstance.current) return undefined;
@@ -357,7 +388,7 @@ export function HazardMap({
 
   useEffect(() => {
     const map = mapInstance.current;
-    if (!map || !mapReady || selectable) return undefined;
+    if (!map || !mapReady) return undefined;
     let active = true;
 
     async function loadBarangayBoundaries() {
@@ -438,11 +469,11 @@ export function HazardMap({
         barangayLayer.current = null;
       }
     };
-  }, [mapReady, selectable]);
+  }, [mapReady]);
 
   useEffect(() => {
     const map = mapInstance.current;
-    if (!map || !mapReady || selectable) return undefined;
+    if (!map || !mapReady) return undefined;
     let active = true;
     let overpassController = null;
 
@@ -561,7 +592,7 @@ export function HazardMap({
         potentialSitesLayer.current = null;
       }
     };
-  }, [mapReady, selectable]);
+  }, [mapReady]);
 
   useEffect(() => {
     const map = mapInstance.current;
@@ -726,16 +757,16 @@ export function HazardMap({
 
       <div className="relative z-0 isolate">
         <div ref={mapElement} className={`hazard-leaflet-map ${height}`} />
-        {!selectable && mapReady && externalLayerState.weather && weather?.current && (
+        {mapReady && externalLayerState.weather && mapWeather?.current && (
           <Suspense fallback={null}>
             <WeatherMapAnimation
               map={mapInstance.current}
               maxBounds={CALAPAN_BOUNDS}
-              weather={weather}
+              weather={mapWeather}
             />
           </Suspense>
         )}
-        {!selectable && (
+        {(
           <>
             <div className="absolute right-3 top-3 z-[500]">
               <button
@@ -842,8 +873,10 @@ export function HazardMap({
                   key: 'weather',
                   label: 'Weather',
                   detail: 'animation',
-                  disabled: !weather?.current,
-                  title: weather?.current ? undefined : 'Weather data is unavailable.',
+                  disabled: !mapWeather?.current,
+                  title: mapWeather?.current
+                    ? undefined
+                    : weatherLayerError || 'Weather data is unavailable.',
                 },
                 {
                   key: 'emergencyServices',
