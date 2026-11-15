@@ -95,13 +95,9 @@ export function Dashboard() {
   const [approvingReport, setApprovingReport] = useState(false);
   const [approvalError, setApprovalError] = useState('');
   const [approvalMessage, setApprovalMessage] = useState('');
+  const [departmentContacts, setDepartmentContacts] = useState([]);
+  const [departmentContactsError, setDepartmentContactsError] = useState('');
   const hasDashboardData = useRef(false);
-  const departmentContacts = [
-    { code: 'DOH', name: 'Department of Health', email: 'doh.calapan@gmail.com' },
-    { code: 'BFP', name: 'Bureau of Fire Protection', email: 'calapan.firedepartment@gmail.com' },
-    { code: 'CDRRMO', name: 'City Disaster Risk Reduction and Management Office', email: 'calapan.disastermanagement@gmail.com' },
-    { code: 'PCG', name: 'Philippine Coast Guard', email: 'coastguard.calapan@gmail.com' },
-  ];
 
   const loadDashboard = async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -125,9 +121,46 @@ export function Dashboard() {
   };
 
   useEffect(() => {
+    let active = true;
     loadDashboard();
+    async function loadDepartmentContacts() {
+      try {
+        const response = await api.getStations();
+        const stations = response?.data?.stations;
+        if (!Array.isArray(stations)) {
+          throw new Error('The response station list was invalid.');
+        }
+        const contacts = stations
+          .filter((station) => (
+            [1, '1', true].includes(station.is_active) &&
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(station.contact_email || '').trim())
+          ))
+          .map((station) => ({
+            station_id: Number(station.station_id),
+            code: station.department_code || '',
+            name: station.station_name,
+            email: station.contact_email,
+            address: station.address_details || '',
+            contact_number: station.contact_number || '',
+            info: station.station_info || '',
+          }));
+        if (!active) return;
+        setDepartmentContacts(contacts);
+        setDepartmentContactsError(
+          contacts.length ? '' : 'No active response stations have a valid contact email.'
+        );
+      } catch (requestError) {
+        if (!active) return;
+        setDepartmentContacts([]);
+        setDepartmentContactsError(requestError.message || 'Unable to load response station contacts.');
+      }
+    }
+    loadDepartmentContacts();
     const refreshTimer = window.setInterval(() => loadDashboard(false), 60000);
-    return () => window.clearInterval(refreshTimer);
+    return () => {
+      active = false;
+      window.clearInterval(refreshTimer);
+    };
   }, []);
 
   async function beginReportApproval(report) {
@@ -161,11 +194,14 @@ export function Dashboard() {
     setApprovalError('');
     setApprovalMessage('');
     try {
-      const response = await api.updateRecord('hazard_reports', selectedReport.report_id, {
+      const selectedContact = departmentContacts.find((contact) => contact.email === approvalRecipient);
+      const payload = {
         status: 'verified',
         send_department_email: sendApprovalEmail,
         department_email: approvalRecipient.trim(),
-      });
+      };
+      if (selectedContact) payload.station_id = selectedContact.station_id;
+      const response = await api.updateRecord('hazard_reports', selectedReport.report_id, payload);
       const message = response?.message || 'Report approved.';
       setApprovalMessage(message);
       setSelectedReport((current) => current
@@ -236,6 +272,9 @@ export function Dashboard() {
     0
   );
   const isMonitoring = unavailable_tables.length === 0;
+  const selectedDepartmentContact = departmentContacts.find(
+    (contact) => contact.email === approvalRecipient
+  );
 
   return (
     <div className="space-y-8">
@@ -729,7 +768,7 @@ export function Dashboard() {
                 {sendApprovalEmail && (
                   <>
                     <label htmlFor="approval-recipient" className="mt-4 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      Recipient email
+                      Response station / recipient email
                       {approvalReview.department?.name && (
                         <span className="ml-2 normal-case font-normal text-slate-500">
                           Auto-selected: {approvalReview.department.name}
@@ -746,14 +785,26 @@ export function Dashboard() {
                       <option value="" disabled>
                         {approvalReview.department?.email
                           ? `Recommended: ${approvalReview.department.email}`
-                          : 'Select an emergency contact'}
+                          : 'Select a response station'}
                       </option>
                       {departmentContacts.map((contact) => (
-                        <option key={contact.code} value={contact.email}>
-                          {contact.code} — {contact.name} ({contact.email})
+                        <option key={contact.station_id} value={contact.email}>
+                          {contact.code ? `${contact.code} — ` : ''}{contact.name} ({contact.email})
+                          {contact.contact_number ? ` · ${contact.contact_number}` : ''}
                         </option>
                       ))}
                     </select>
+                    {departmentContactsError ? (
+                      <p role="alert" className="mt-2 text-[10px] text-amber-300">
+                        {departmentContactsError} Apply the response-station migration to enable the database-backed contact list.
+                      </p>
+                    ) : selectedDepartmentContact && (
+                      <div className="mt-2 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-[10px] leading-5 text-slate-400">
+                        {selectedDepartmentContact.address && <p>{selectedDepartmentContact.address}</p>}
+                        {selectedDepartmentContact.contact_number && <p>Hotline: {selectedDepartmentContact.contact_number}</p>}
+                        {selectedDepartmentContact.info && <p>{selectedDepartmentContact.info}</p>}
+                      </div>
+                    )}
                   </>
                 )}
 

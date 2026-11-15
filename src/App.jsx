@@ -16,7 +16,6 @@ import { ResetPassword } from './pages/ResetPassword';
 import SubmittedReports from './pages/SubmittedReports';
 import { Notifications } from './pages/Notifications';
 import { APIManagement } from './pages/APIManagement';
-import { DispatchHub } from './pages/DispatchHub';
 import { RegisterDirectory } from './pages/RegisterDirectory';
 
 const ResidentDashboard = lazy(() => import('./pages/ResidentDashboard').then((module) => ({
@@ -119,17 +118,6 @@ export default function App() {
                   <Suspense fallback={<p role="status" className="text-sm text-slate-400">Loading report tools...</p>}>
                     <PdfReports />
                   </Suspense>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/admin/dispatch"
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <Layout>
-                  <DispatchHub />
                 </Layout>
               </ProtectedRoute>
             }

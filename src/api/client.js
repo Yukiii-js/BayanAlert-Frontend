@@ -119,6 +119,7 @@ export const api = {
 
   //add
   getBarangays: () => request('/barangays'),
+  getStations: () => request('/stations'),
   getLocationSuggestions: (query, signal) => request(
     `/location-suggestions?q=${encodeURIComponent(query)}`,
     { signal }

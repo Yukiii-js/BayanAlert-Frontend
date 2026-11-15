@@ -1,6 +1,5 @@
 import {
   Building2,
-  ClipboardList,
   Database,
   FileClock,
   FileText,
@@ -36,20 +35,6 @@ export const ADMIN_NAVIGATION = [
         count: (metrics) => metrics?.pending_reports,
         countLabel: 'pending',
         matches: (pathname) => pathname.startsWith('/admin/tables/hazard_reports'),
-      },
-      {
-        label: 'Dispatch & Assignments',
-        subtitle: 'Assign response units and track resolutions',
-        to: '/admin/dispatch',
-        icon: ClipboardList,
-        count: (metrics) => {
-          if (!metrics?.counts) return undefined;
-          return Number(metrics.counts.report_assignments || 0) + Number(metrics.counts.resolutions || 0);
-        },
-        countLabel: 'records',
-        matches: (pathname) => pathname.startsWith('/admin/dispatch')
-          || pathname.startsWith('/admin/tables/report_assignments')
-          || pathname.startsWith('/admin/tables/resolutions'),
       },
       {
         label: 'Regional Advisories',
