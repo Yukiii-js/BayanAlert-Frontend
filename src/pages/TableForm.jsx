@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { HazardMap } from '../components/HazardMap';
+import { LocationAutocomplete } from '../components/LocationAutocomplete';
 import { 
   ArrowLeft, 
   Save, 
@@ -28,6 +30,10 @@ export function TableForm() {
   const [notificationPreview, setNotificationPreview] = useState(null);
   const [notificationEmail, setNotificationEmail] = useState('');
   const [sendDepartmentEmail, setSendDepartmentEmail] = useState(true);
+  const [manualPinSelected, setManualPinSelected] = useState(false);
+  const [locationLookup, setLocationLookup] = useState('');
+  const reverseLookupTimer = useRef(null);
+  const reverseLookupController = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -51,6 +57,7 @@ export function TableForm() {
             initial[formKey] = f.value ?? (f.default || '');
           });
           setFormData(initial);
+          setManualPinSelected(Boolean(initial.latitude && initial.longitude));
         } else {
           const res = await api.getTableOptions(table);
           setTableInfo(res.data.table_info || {});
@@ -59,9 +66,12 @@ export function TableForm() {
           const initial = {};
           (res.data.fields || []).forEach(f => {
             const formKey = f.form_name || f.name;
-            initial[formKey] = f.default || '';
+            initial[formKey] = formKey === 'severity_level'
+              ? 'moderate'
+              : f.default || '';
           });
           setFormData(initial);
+          setManualPinSelected(false);
         }
       } catch (err) {
         setError(err.message || 'Failed to initialize form.');
@@ -73,11 +83,72 @@ export function TableForm() {
     fetchData();
   }, [table, id, isEdit]);
 
+  useEffect(() => () => {
+    if (reverseLookupTimer.current) window.clearTimeout(reverseLookupTimer.current);
+    reverseLookupController.current?.abort();
+  }, []);
+
   const handleChange = (formName, value) => {
     setFormData(prev => ({
       ...prev,
       [formName]: value
     }));
+  };
+
+  const handleAddressSuggestionSelect = (suggestion) => {
+    setLocationLookup('');
+    setFormData((previous) => ({
+      ...previous,
+      address_details: suggestion.label,
+      ...(!manualPinSelected && suggestion.latitude && suggestion.longitude
+        ? { latitude: suggestion.latitude, longitude: suggestion.longitude }
+        : {}),
+    }));
+  };
+
+  const handleMapLocationSelect = ({ latitude, longitude }) => {
+    setManualPinSelected(true);
+    setLocationLookup('Looking up the selected map location...');
+    setFormData((previous) => ({ ...previous, latitude, longitude }));
+
+    if (reverseLookupTimer.current) window.clearTimeout(reverseLookupTimer.current);
+    reverseLookupController.current?.abort();
+    reverseLookupTimer.current = window.setTimeout(async () => {
+      const controller = new AbortController();
+      reverseLookupController.current = controller;
+      try {
+        const query = new URLSearchParams({
+          format: 'jsonv2',
+          lat: latitude,
+          lon: longitude,
+          zoom: '18',
+          addressdetails: '1',
+        });
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?${query}`,
+          { headers: { 'Accept-Language': 'en' }, signal: controller.signal }
+        );
+        if (!response.ok) {
+          throw new Error(`Address lookup failed (HTTP ${response.status}).`);
+        }
+        const result = await response.json();
+        if (typeof result.display_name !== 'string' || !result.display_name.trim()) {
+          throw new Error('No street address was found for this map point.');
+        }
+        setFormData((previous) => ({
+          ...previous,
+          address_details: result.display_name.trim().slice(0, 255),
+        }));
+        setLocationLookup('');
+      } catch (lookupError) {
+        if (lookupError.name === 'AbortError') return;
+        setLocationLookup('Could not look up this point. Enter the address manually.');
+      } finally {
+        if (reverseLookupController.current === controller) {
+          reverseLookupController.current = null;
+        }
+      }
+    }, 900);
   };
 
   const handleSubmit = async (e) => {
@@ -243,7 +314,11 @@ export function TableForm() {
         <div className="space-y-5">
           {fields.map((field) => {
             const formKey = field.form_name || field.name;
-            const isRequired = !field.nullable && field.default === null && !field.password;
+            if (table === 'hazard_reports' && ['latitude', 'longitude'].includes(formKey)) {
+              return null;
+            }
+            const isRequired = (table === 'hazard_reports' && formKey === 'severity_level')
+              || (!field.nullable && field.default === null && !field.password);
             const hasOptions = Array.isArray(field.options) && field.options.length > 0;
             const hasEnum = Array.isArray(field.enum) && field.enum.length > 0;
             const isTextarea = field.type.includes('text') || field.type.includes('blob');
@@ -281,6 +356,26 @@ export function TableForm() {
                       {showPassword[formKey] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                ) : table === 'hazard_reports' && formKey === 'address_details' ? (
+                  <LocationAutocomplete
+                    id="admin-hazard-address"
+                    value={formData[formKey] ?? ''}
+                    onChange={(event) => handleChange(formKey, event.target.value)}
+                    onSelect={handleAddressSuggestionSelect}
+                    required={isRequired}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                ) : table === 'hazard_reports' && formKey === 'severity_level' ? (
+                  <select
+                    value={formData[formKey] ?? ''}
+                    onChange={(event) => handleChange(formKey, event.target.value)}
+                    required={isRequired}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2.5 text-sm capitalize text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  >
+                    {['low', 'moderate', 'high', 'critical'].map((severity) => (
+                      <option key={severity} value={severity}>{severity}</option>
+                    ))}
+                  </select>
                 ) : hasOptions ? (
                   /* Foreign Key Reference Select */
                   <select
@@ -341,6 +436,33 @@ export function TableForm() {
             );
           })}
         </div>
+
+        {table === 'hazard_reports' && (
+          <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">Report location</h2>
+              <p className="mt-1 text-[10px] text-slate-500">
+                Search for a barangay or address, or click and drag the map pin. Coordinates are saved automatically.
+              </p>
+            </div>
+            <HazardMap
+              selectable
+              height="h-[320px]"
+              selectedLocation={formData.latitude && formData.longitude
+                ? { latitude: formData.latitude, longitude: formData.longitude }
+                : null}
+              centerOnSelectedLocation={!manualPinSelected}
+              onLocationSelect={handleMapLocationSelect}
+            />
+            <p className={`text-[10px] ${locationLookup.startsWith('Could not') ? 'text-amber-300' : 'text-slate-400'}`}>
+              {locationLookup || (
+                formData.latitude && formData.longitude
+                  ? `Selected: ${formData.latitude}, ${formData.longitude}`
+                  : 'No map point selected. A location pin is optional.'
+              )}
+            </p>
+          </section>
+        )}
 
         {/* Form Actions */}
         <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">

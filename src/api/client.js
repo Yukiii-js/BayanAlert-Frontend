@@ -119,6 +119,21 @@ export const api = {
 
   //add
   getBarangays: () => request('/barangays'),
+  getLocationSuggestions: (query, signal) => request(
+    `/location-suggestions?q=${encodeURIComponent(query)}`,
+    { signal }
+  ),
+  issueUserWarningStrike: (userId, reason) => request(`/admin/users/${userId}/warning-strike`, {
+    method: 'POST',
+    body: { reason },
+  }),
+  setUserSuspension: (userId, suspended, reason = '') => request(`/admin/users/${userId}/suspension`, {
+    method: 'POST',
+    body: { suspended, reason },
+  }),
+  resolveHazardReport: (reportId) => request(`/admin/reports/${reportId}/resolve`, {
+    method: 'POST',
+  }),
   register: (data) =>request('/auth/register', {method: 'POST',body: data,}),
   sendRegistrationVerification: (email) => request('/auth/send-registration-verification', {
     method: 'POST',
@@ -128,6 +143,14 @@ export const api = {
   resendVerificationEmail: (email) => request('/auth/resend-verification', {
     method: 'POST',
     body: { email },
+  }),
+  requestPasswordReset: (email) => request('/auth/request-password-reset', {
+    method: 'POST',
+    body: { email },
+  }),
+  resetPassword: (data) => request('/auth/reset-password', {
+    method: 'POST',
+    body: data,
   }),
   getCommunityDashboard: () => request('/reports/community'),
   getHazardMap: () => request('/map/reports'),

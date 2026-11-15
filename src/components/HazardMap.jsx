@@ -254,6 +254,7 @@ export function HazardMap({
   selectable = false,
   selectedLocation = null,
   onLocationSelect,
+  centerOnSelectedLocation = false,
   weather = null,
 }) {
   const navigate = useNavigate();
@@ -616,6 +617,7 @@ export function HazardMap({
     if (!map || !selectable || !mapData.coordinates_available || !onLocationSelect) return undefined;
 
     function selectMapPoint(event) {
+      if (!CALAPAN_BOUNDS.contains(event.latlng)) return;
       onLocationSelect({
         latitude: event.latlng.lat.toFixed(7),
         longitude: event.latlng.lng.toFixed(7),
@@ -639,14 +641,35 @@ export function HazardMap({
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
         !CALAPAN_BOUNDS.contains([latitude, longitude])) return;
 
-    L.marker([latitude, longitude], { icon: markerIcon('verified') })
+    const marker = L.marker([latitude, longitude], {
+      icon: markerIcon('verified'),
+      draggable: selectable,
+    })
       .bindPopup('Selected report location')
       .addTo(layer);
-  }, [selectedLocation]);
+
+    if (selectable && onLocationSelect) {
+      marker.on('dragend', () => {
+        const position = marker.getLatLng();
+        if (!CALAPAN_BOUNDS.contains(position)) {
+          marker.setLatLng([latitude, longitude]);
+          return;
+        }
+        onLocationSelect({
+          latitude: position.lat.toFixed(7),
+          longitude: position.lng.toFixed(7),
+        });
+      });
+    }
+    if (centerOnSelectedLocation) {
+      map.flyTo([latitude, longitude], Math.max(map.getZoom(), 14), { duration: 0.6 });
+    }
+  }, [centerOnSelectedLocation, mapReady, onLocationSelect, selectable, selectedLocation]);
 
   const visibleReports = useMemo(
     () => mapData.reports.filter((report) => (
-      selectedCategory === 'all' || String(report.category_id) === selectedCategory
+      String(report.status || '').toLowerCase() !== 'resolved' &&
+      (selectedCategory === 'all' || String(report.category_id) === selectedCategory)
     )),
     [mapData.reports, selectedCategory]
   );

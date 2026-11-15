@@ -12,6 +12,7 @@ import { GuestHome } from './pages/GuestHome';
 import { Register } from './pages/Register';
 import { VerifyEmail } from './pages/VerifyEmail';
 import { ResidentLogin } from './pages/ResidentLogin';
+import { ResetPassword } from './pages/ResetPassword';
 import SubmittedReports from './pages/SubmittedReports';
 import { Notifications } from './pages/Notifications';
 import { APIManagement } from './pages/APIManagement';
@@ -38,6 +39,7 @@ export default function App() {
 
           {/* Public resident login page */}
           <Route path="/resident-login" element={<ResidentLogin />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Protected resident dashboard */}
           <Route

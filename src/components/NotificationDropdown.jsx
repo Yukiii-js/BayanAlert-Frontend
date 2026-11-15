@@ -144,7 +144,14 @@ export function NotificationDropdown({ role = 'resident' }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-[100] mt-2 w-[min(90vw,24rem)] overflow-hidden rounded-xl border border-slate-700 bg-slate-950 shadow-2xl">
+        <>
+          <button
+            type="button"
+            aria-label="Close notifications"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-[90] bg-slate-950/60 sm:hidden"
+          />
+          <div className="fixed inset-x-4 top-16 z-[100] mx-auto flex max-h-[75vh] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-950 shadow-2xl sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:max-h-[min(75vh,34rem)] sm:w-96">
           <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
             <div>
               <p className="text-sm font-bold text-white">Notifications</p>
@@ -164,7 +171,7 @@ export function NotificationDropdown({ role = 'resident' }) {
               <Loader2 className="h-4 w-4 animate-spin" /> Loading notifications...
             </div>
           ) : notifications.length ? (
-            <div className="max-h-[min(65vh,28rem)] divide-y divide-slate-800 overflow-y-auto">
+            <div className="min-h-0 flex-1 divide-y divide-slate-800 overflow-y-auto">
               {notifications.slice(0, 12).map((notification) => (
                 <button
                   type="button"
@@ -203,7 +210,8 @@ export function NotificationDropdown({ role = 'resident' }) {
           >
             View all notifications
           </button>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

@@ -24,9 +24,11 @@ import { api, publicFileUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { HazardMap } from '../components/HazardMap';
 import { BrandLogo } from '../components/BrandLogo';
+import { LocationAutocomplete } from '../components/LocationAutocomplete';
 
 const EMPTY_FORM = {
   category_id: '',
+  severity_level: 'moderate',
   title: '',
   description: '',
   address_details: '',
@@ -132,6 +134,7 @@ export default function SubmittedReports({ view = 'submit' }) {
   const [selectedReport, setSelectedReport] = useState(null);
 
   const [form, setForm] = useState(EMPTY_FORM);
+  const [manualPinSelected, setManualPinSelected] = useState(false);
   const [evidenceFiles, setEvidenceFiles] = useState([]);
   const [existingEvidence, setExistingEvidence] = useState([]);
   const addressLookupTimer = useRef(null);
@@ -228,6 +231,7 @@ export default function SubmittedReports({ view = 'submit' }) {
     setAddressLookup('idle');
     setAddressLookupError('');
     setForm(EMPTY_FORM);
+    setManualPinSelected(false);
     setEvidenceFiles([]);
     setExistingEvidence([]);
     setEditingReport(null);
@@ -241,6 +245,7 @@ export default function SubmittedReports({ view = 'submit' }) {
     setAddressLookupError('');
     setEditingReport(null);
     setForm(EMPTY_FORM);
+    setManualPinSelected(false);
     setEvidenceFiles([]);
     setExistingEvidence([]);
     setFormError('');
@@ -268,12 +273,14 @@ export default function SubmittedReports({ view = 'submit' }) {
     setEditingReport(report);
     setForm({
       category_id: String(report.category_id ?? ''),
+      severity_level: report.severity_level || 'moderate',
       title: report.title || '',
       description: report.description || '',
       address_details: report.address_details || '',
       latitude: report.latitude || '',
       longitude: report.longitude || '',
     });
+    setManualPinSelected(Boolean(report.latitude && report.longitude));
     setEvidenceFiles([]);
     setExistingEvidence(report.evidence || []);
     setFormError('');
@@ -318,6 +325,7 @@ export default function SubmittedReports({ view = 'submit' }) {
     cancelAddressLookup();
     setAddressLookup('loading');
     setAddressLookupError('');
+    setManualPinSelected(true);
     setForm((previous) => ({ ...previous, latitude, longitude }));
 
     const waitForRateLimit = Math.max(
@@ -373,6 +381,18 @@ export default function SubmittedReports({ view = 'submit' }) {
     }, waitForRateLimit);
   }
 
+  function handleAddressSuggestionSelect(suggestion) {
+    setAddressLookup('idle');
+    setAddressLookupError('');
+    setForm((previous) => ({
+      ...previous,
+      address_details: suggestion.label,
+      ...(!manualPinSelected && suggestion.latitude && suggestion.longitude
+        ? { latitude: suggestion.latitude, longitude: suggestion.longitude }
+        : {}),
+    }));
+  }
+
   function handleFileChange(event) {
     const selected = Array.from(event.target.files || []);
     const allowedTypes = [
@@ -420,8 +440,8 @@ export default function SubmittedReports({ view = 'submit' }) {
     setSuccessMessage('');
 
     if (!form.category_id || !form.title.trim() ||
-        !form.description.trim() || !form.address_details.trim()) {
-      setFormError('Please fill in the category, title, description, and address.');
+        !form.description.trim() || !form.address_details.trim() || !form.severity_level) {
+      setFormError('Please fill in the category, severity, title, description, and address.');
       return;
     }
 
@@ -435,6 +455,7 @@ export default function SubmittedReports({ view = 'submit' }) {
       if (hasFiles) {
         body = new FormData();
         body.append('category_id', form.category_id);
+        body.append('severity_level', form.severity_level);
         body.append('title', form.title.trim());
         body.append('description', form.description.trim());
         body.append('address_details', form.address_details.trim());
@@ -447,6 +468,7 @@ export default function SubmittedReports({ view = 'submit' }) {
       } else {
         body = {
           category_id: Number(form.category_id),
+          severity_level: form.severity_level,
           title: form.title.trim(),
           description: form.description.trim(),
           address_details: form.address_details.trim(),
@@ -682,6 +704,26 @@ export default function SubmittedReports({ view = 'submit' }) {
                   <p className="mt-1 text-[10px] text-slate-500">Identify the hazard and describe what happened.</p>
                 </div>
 
+                <div className="md:col-span-1">
+                  <label htmlFor="severity_level" className="mb-1.5 block text-xs font-bold text-slate-300">
+                    Severity <span className="text-rose-400">*</span>
+                  </label>
+                  <select
+                    id="severity_level"
+                    name="severity_level"
+                    value={form.severity_level}
+                    onChange={handleFormChange}
+                    required
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs capitalize text-slate-100 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  >
+                    {['low', 'moderate', 'high', 'critical'].map((severity) => (
+                      <option key={severity} value={severity}>
+                        {severity}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="md:col-span-2">
                   <label htmlFor="category_id" className="mb-1.5 block text-xs font-bold text-slate-300">
                     Hazard Category <span className="text-rose-400">*</span>
@@ -749,11 +791,11 @@ export default function SubmittedReports({ view = 'submit' }) {
                   <label htmlFor="address_details" className="mb-1.5 block text-xs font-bold text-slate-300">
                     Hazard Location / Address <span className="text-rose-400">*</span>
                   </label>
-                  <input
+                  <LocationAutocomplete
                     id="address_details"
-                    name="address_details"
                     value={form.address_details}
                     onChange={handleFormChange}
+                    onSelect={handleAddressSuggestionSelect}
                     maxLength={255}
                     required
                     placeholder="Enter the barangay, street, or specific location"
@@ -773,6 +815,7 @@ export default function SubmittedReports({ view = 'submit' }) {
                     selectedLocation={form.latitude && form.longitude
                       ? { latitude: form.latitude, longitude: form.longitude }
                       : null}
+                    centerOnSelectedLocation={!manualPinSelected}
                     onLocationSelect={handleMapLocationSelect}
                   />
                   <p className="mt-2 text-[10px] text-slate-400">

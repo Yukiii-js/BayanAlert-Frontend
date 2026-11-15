@@ -168,6 +168,76 @@ export function TableList() {
   const totalPages = Math.ceil(total / (page_size || 20)) || 1;
   const primaryKey = table_info?.primary_key || 'id';
 
+  const handleWarningStrike = async (userId) => {
+    const reason = window.prompt(
+      'Optional warning reason:',
+      'False or unverified hazard report.'
+    );
+    if (reason === null) return;
+
+    setActioningId(userId);
+    setError('');
+    setMessage('');
+    try {
+      const response = await api.issueUserWarningStrike(userId, reason.trim());
+      setMessage(response?.message || 'Warning strike issued.');
+      setSelectedRecord(null);
+      await loadTableData(page, search);
+    } catch (requestError) {
+      setError(requestError.message || 'Could not issue this warning strike.');
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleSuspensionToggle = async (record) => {
+    const suspended = String(record.status || '').toLowerCase() === 'suspended';
+    let reason = '';
+    if (suspended) {
+      if (!window.confirm('Reactivate this resident account?')) return;
+    } else {
+      reason = window.prompt('Reason for suspension:', 'Suspended by an administrator.');
+      if (reason === null) return;
+    }
+
+    setActioningId(record.user_id);
+    setError('');
+    setMessage('');
+    try {
+      const response = await api.setUserSuspension(record.user_id, !suspended, reason.trim());
+      setMessage(response?.message || (suspended ? 'Account reactivated.' : 'Account suspended.'));
+      setSelectedRecord(null);
+      await loadTableData(page, search);
+    } catch (requestError) {
+      setError(requestError.message || 'Could not update this account.');
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleResolveReport = async (reportId) => {
+    setActioningId(reportId);
+    setError('');
+    setMessage('');
+    try {
+      const response = await api.resolveHazardReport(reportId);
+      setMessage(response?.message || 'Hazard report marked as resolved.');
+      setSelectedRecord(null);
+      await loadTableData(page, search);
+    } catch (requestError) {
+      setError(requestError.message || 'Could not resolve this hazard report.');
+    } finally {
+      setActioningId(null);
+    }
+  };
+  const canWarnSelectedReporter = table === 'hazard_reports'
+    && ['disputed', 'rejected'].includes(String(selectedRecord?.status || '').toLowerCase())
+    && Boolean(selectedRecord?.user_id);
+  const canResolveSelectedReport = table === 'hazard_reports'
+    && ['approved', 'verified', 'assigned', 'in_progress'].includes(
+      String(selectedRecord?.status || '').toLowerCase()
+    );
+
   return (
     <div className="space-y-6">
       {/* Top Breadcrumb & Actions */}
@@ -285,6 +355,8 @@ export function TableList() {
                         {columns.map((col) => {
                           const val = row[col];
                           const isPk = col === primaryKey;
+                          const strikeCount = Math.min(3, Math.max(0, Number(row.warning_strikes) || 0));
+                          const userSuspended = String(row.status || '').toLowerCase() === 'suspended';
                           const isBoolean =
                             typeof val === 'boolean' ||
                             /^(tinyint\(1\)|boolean|bool)/i.test(schema[col]?.type || '');
@@ -293,6 +365,19 @@ export function TableList() {
                             <td key={col} className="px-4 py-3 whitespace-nowrap max-w-xs truncate text-slate-300 font-sans">
                               {isPk ? (
                                 <span className="font-mono text-emerald-400 font-semibold">{val}</span>
+                              ) : table === 'users' && col === 'full_name' ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <span>{String(val || 'Unnamed user')}</span>
+                                  <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${
+                                    userSuspended
+                                      ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                                      : strikeCount > 0
+                                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                                        : 'border-slate-700 bg-slate-800 text-slate-400'
+                                  }`}>
+                                    {strikeCount}/3{userSuspended ? ' · Suspended' : ''}
+                                  </span>
+                                </span>
                               ) : val === null || val === undefined ? (
                                 <span className="text-slate-600 italic">null</span>
                               ) : isBoolean ? (
@@ -326,6 +411,32 @@ export function TableList() {
                                   <Eye className="h-3.5 w-3.5" />
                                   Details
                                 </button>
+                                {table === 'users' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleWarningStrike(recordId)}
+                                      disabled={actioningId === recordId || Number(row.warning_strikes) >= 3}
+                                      className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[10px] font-bold text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Issue warning strike
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSuspensionToggle(row)}
+                                      disabled={actioningId === recordId}
+                                      className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition disabled:opacity-50 ${
+                                        String(row.status || '').toLowerCase() === 'suspended'
+                                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                                          : 'border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20'
+                                      }`}
+                                    >
+                                      {String(row.status || '').toLowerCase() === 'suspended'
+                                        ? 'Reactivate account'
+                                        : 'Suspend account'}
+                                    </button>
+                                  </>
+                                )}
                                 <Link
                                   to={`/admin/tables/${table}/edit/${recordId}`}
                                   className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
@@ -452,6 +563,30 @@ export function TableList() {
                   <Check className="h-4 w-4" />
                   {currentReview.approveLabel}
                 </button>
+              </div>
+            )}
+            {(canWarnSelectedReporter || canResolveSelectedReport) && (
+              <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-800 px-6 py-4">
+                {canWarnSelectedReporter && (
+                    <button
+                      type="button"
+                      onClick={() => handleWarningStrike(selectedRecord.user_id)}
+                      disabled={actioningId === selectedRecord.user_id}
+                      className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-60"
+                    >
+                      Issue Warning Strike to Reporter
+                    </button>
+                  )}
+                {canResolveSelectedReport && (
+                  <button
+                    type="button"
+                    onClick={() => handleResolveReport(selectedRecord.report_id)}
+                    disabled={actioningId === selectedRecord.report_id}
+                    className="inline-flex items-center gap-2 rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-2.5 text-sm font-semibold text-teal-300 transition hover:bg-teal-500/20 disabled:opacity-60"
+                  >
+                    {actioningId === selectedRecord.report_id ? 'Resolving...' : 'Mark as Resolved'}
+                  </button>
+                )}
               </div>
             )}
           </div>

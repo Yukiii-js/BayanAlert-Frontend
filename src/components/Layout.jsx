@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   LayoutDashboard, 
@@ -10,6 +10,8 @@ import {
   Megaphone,
   FileText,
   PlugZap,
+  Menu,
+  X,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 import { NotificationDropdown } from './NotificationDropdown';
@@ -17,6 +19,12 @@ import { NotificationDropdown } from './NotificationDropdown';
 export function Layout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname, location.search, location.hash]);
 
   const handleLogout = async () => {
     await logout();
@@ -27,8 +35,8 @@ export function Layout({ children }) {
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/80 shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-orange-500/40 after:to-transparent">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3 xl:gap-8">
             <Link to="/admin" className="flex items-center gap-2.5 group">
               <div className="flex h-10 w-10 items-center justify-center drop-shadow-[0_0_14px_rgba(249,115,22,0.16)] transition-transform group-hover:scale-105">
                 <BrandLogo className="h-10 w-10" />
@@ -131,7 +139,7 @@ export function Layout({ children }) {
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
             <NotificationDropdown role="admin" />
             <div className="hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/60">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -150,8 +158,46 @@ export function Layout({ children }) {
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Logout</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((current) => !current)}
+              className="inline-flex items-center justify-center rounded-lg border border-slate-700 p-2 text-slate-300 transition hover:border-emerald-500/40 hover:bg-slate-800 hover:text-white md:hidden"
+              aria-label={mobileMenuOpen ? 'Close admin navigation' : 'Open admin navigation'}
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
           </div>
         </div>
+        {mobileMenuOpen && (
+          <nav aria-label="Admin navigation" className="mx-auto grid max-w-7xl grid-cols-2 gap-2 border-t border-slate-800 px-4 py-3 sm:px-6 md:hidden">
+            {[
+              { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+              { to: '/admin/tables/hazard_reports', label: 'Hazard Reports', icon: Database },
+              { to: '/admin/tables/users', label: 'Users', icon: User },
+              { to: '/admin#regional-advisories', label: 'Regional Advisories', icon: Megaphone, end: true },
+              { to: '/categories', label: 'Hazard Categories', icon: Tags },
+              { to: '/admin/reports', label: 'PDF Reports', icon: FileText },
+              { to: '/admin/api-management', label: 'API Management', icon: PlugZap },
+              { to: '/admin/notifications', label: 'Announcements', icon: Megaphone },
+            ].map(({ to, label, icon: Icon, end }) => (
+              <NavLink
+                key={label}
+                to={to}
+                end={end}
+                onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) => `flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                  isActive
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                    : 'border-slate-800 bg-slate-900/70 text-slate-300 hover:border-slate-700 hover:bg-slate-800'
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </nav>
+        )}
       </header>
 
       {/* Main Content */}
