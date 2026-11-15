@@ -192,8 +192,12 @@ export function APIManagement() {
         ? await api.testSystemApi(apiConfig.id)
         : await api.syncExternalApi(apiConfig.api_key);
       const result = response?.data || {};
+      const requestStatus = result.http_status ? `HTTP ${result.http_status}` : 'connection succeeded';
+      const diagnostics = Number.isFinite(Number(result.records_fetched))
+        ? ` — ${Number(result.records_fetched)} records fetched, ${result.records_matched_region ?? '—'} matched Oriental Mindoro`
+        : '';
       setMessage(
-        `${apiConfig.api_name || apiConfig.display_name} responded with HTTP ${result.http_status || 'OK'} in ${result.latency_ms ?? '—'} ms.`
+        `${apiConfig.api_name || apiConfig.display_name} ${requestStatus} in ${result.latency_ms ?? '—'} ms${diagnostics}.`
       );
       await loadApis();
     } catch (error) {
@@ -317,7 +321,7 @@ export function APIManagement() {
                   </span>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-800 pt-4 text-xs">
+                <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-800 pt-4 text-xs sm:grid-cols-3">
                   <div>
                     <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Last tested</p>
                     <p className="mt-1 text-slate-300">{timestamp(apiConfig.last_synced_at)}</p>
@@ -328,6 +332,15 @@ export function APIManagement() {
                       {apiConfig.last_http_status ? `HTTP ${apiConfig.last_http_status}` : '—'}
                       {apiConfig.last_latency_ms !== null && apiConfig.last_latency_ms !== undefined
                         ? ` · ${apiConfig.last_latency_ms} ms`
+                        : ''}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Parsed events</p>
+                    <p className="mt-1 text-slate-300">
+                      {apiConfig.records_fetched ?? apiConfig.records_cached ?? '—'}
+                      {apiConfig.records_matched_region !== null && apiConfig.records_matched_region !== undefined
+                        ? ` · ${apiConfig.records_matched_region} regional`
                         : ''}
                     </p>
                   </div>

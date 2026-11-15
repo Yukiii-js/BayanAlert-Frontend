@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
   CloudLightning,
   Clock3,
   ExternalLink,
+  Globe2,
   MapPin,
   Radio,
   RefreshCw,
@@ -31,6 +33,26 @@ const SOURCES = [
     description: 'Regional alerts with severity, hazard type, distance, and reported impact where available.',
     emptyTitle: 'No qualifying regional advisories',
     emptyDescription: 'No qualifying events are currently available for the selected feed.',
+  },
+  {
+    id: 'earthquakes',
+    label: 'Earthquakes',
+    providerId: 'usgs',
+    icon: Activity,
+    heading: 'USGS earthquake feed',
+    description: 'GeoJSON earthquake events in and around the Philippines.',
+    emptyTitle: 'No recent earthquakes',
+    emptyDescription: 'No matching USGS earthquake events are available for this view.',
+  },
+  {
+    id: 'reliefweb',
+    label: 'ReliefWeb disasters',
+    providerId: 'reliefweb',
+    icon: Globe2,
+    heading: 'ReliefWeb disaster reports',
+    description: 'Recent Philippines disaster reports from the free, keyless ReliefWeb API.',
+    emptyTitle: 'No recent disaster reports',
+    emptyDescription: 'No Philippines disaster reports are currently available for this view.',
   },
 ];
 
@@ -65,8 +87,8 @@ function eventSeverity(event) {
 }
 
 function eventLocation(event) {
-  const latitude = Number(event.latitude);
-  const longitude = Number(event.longitude);
+  const latitude = event.latitude === null || event.latitude === undefined ? NaN : Number(event.latitude);
+  const longitude = event.longitude === null || event.longitude === undefined ? NaN : Number(event.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || (!latitude && !longitude)) {
     return null;
   }
@@ -81,8 +103,11 @@ function isTyphoonEvent(event) {
 }
 
 function matchesSource(event, sourceId) {
-  if (String(event.source || '').toLowerCase() !== 'gdacs') return false;
-  return sourceId === 'typhoons' ? isTyphoonEvent(event) : true;
+  const eventSource = String(event.source || '').toLowerCase();
+  if (sourceId === 'typhoons') return eventSource === 'gdacs' && isTyphoonEvent(event);
+  if (sourceId === 'gdacs') return eventSource === 'gdacs' && !isTyphoonEvent(event);
+  if (sourceId === 'earthquakes') return eventSource === 'usgs';
+  return sourceId === 'reliefweb' && eventSource === 'reliefweb';
 }
 
 function displayHazardType(value) {
@@ -94,16 +119,19 @@ function ProviderStatus({ provider }) {
   const status = String(provider?.status || 'unknown').toLowerCase();
   const isOnline = status === 'online' || status === 'success';
   const isUnavailable = status === 'error' || status === 'offline';
+  const isDisabled = status === 'disabled';
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider ${
       isOnline
         ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
         : isUnavailable
           ? 'border-rose-500/20 bg-rose-500/10 text-rose-300'
-          : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+          : isDisabled
+            ? 'border-slate-700 bg-slate-800 text-slate-400'
+            : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
     }`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : isUnavailable ? 'bg-rose-400' : 'bg-amber-300'}`} />
-      {isOnline ? 'Feed connected' : isUnavailable ? 'Feed unavailable' : 'Status unavailable'}
+      <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : isUnavailable ? 'bg-rose-400' : isDisabled ? 'bg-slate-500' : 'bg-amber-300'}`} />
+      {isOnline ? 'Feed connected' : isUnavailable ? 'Feed unavailable' : isDisabled ? 'Feed disabled' : 'Status unavailable'}
     </span>
   );
 }
@@ -113,9 +141,26 @@ function publishedToResidents(event) {
   if ([0, '0', false].includes(event.is_published_to_residents)) return false;
 
   const source = String(event.source || '').toLowerCase();
-  const distance = Number(event.distance_to_municipality_km);
-  if (source === 'gdacs') return distance <= 500;
-  return false;
+  return ['gdacs', 'usgs', 'reliefweb'].includes(source)
+    && (event.is_philippines_event === true ||
+      (event.distance_to_municipality_km !== null && event.distance_to_municipality_km !== undefined &&
+        Number.isFinite(Number(event.distance_to_municipality_km))));
+}
+
+function matchesScope(event, scope) {
+  if (scope === 'national') {
+    if (event.is_philippines_event === true) return true;
+    const latitude = Number(event.latitude);
+    const longitude = Number(event.longitude);
+    return Number.isFinite(latitude) && Number.isFinite(longitude) &&
+      latitude >= 4 && latitude <= 22 && longitude >= 116 && longitude <= 127;
+  }
+  const distance = event.distance_to_municipality_km === null || event.distance_to_municipality_km === undefined
+    ? NaN
+    : Number(event.distance_to_municipality_km);
+  if (Number.isFinite(distance) && distance <= 150) return true;
+  const area = String(event.affected_area || '').toLowerCase();
+  return area.includes('oriental mindoro') || area.includes('calapan');
 }
 
 function normalizeFeedResponse(response) {
@@ -155,7 +200,9 @@ function advisoryIdentity(event) {
 
 function EventCard({ event, highlighted }) {
   const severity = eventSeverity(event);
-  const distance = Number(event.distance_to_municipality_km);
+  const distance = event.distance_to_municipality_km === null || event.distance_to_municipality_km === undefined
+    ? NaN
+    : Number(event.distance_to_municipality_km);
   const location = eventLocation(event);
   const cardId = `advisory-${advisoryIdentity(event).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
@@ -242,6 +289,7 @@ function EventCard({ event, highlighted }) {
 export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
   const [feed, setFeed] = useState(null);
   const [activeSource, setActiveSource] = useState('typhoons');
+  const [scope, setScope] = useState('regional');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -284,39 +332,45 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
     );
     if (!target) return;
 
-    const targetSource = isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
+    const targetSource = target.source === 'USGS'
+      ? 'earthquakes'
+      : target.source === 'RELIEFWEB'
+        ? 'reliefweb'
+        : isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
     if (activeSource !== targetSource) setActiveSource(targetSource);
-  }, [feed, highlightedAdvisoryId, activeSource]);
+    const distance = Number(target.distance_to_municipality_km);
+    if (!Number.isFinite(distance) || distance > 150) setScope('national');
+  }, [feed, highlightedAdvisoryId, activeSource, scope]);
 
   useEffect(() => {
     if (!feed || !highlightedAdvisoryId) return;
     const target = (feed.events || []).find(
       (event) => advisoryIdentity(event) === String(highlightedAdvisoryId)
     );
-    if (!target || activeSource !== (isTyphoonEvent(target) ? 'typhoons' : 'gdacs')) return;
+    const targetSource = target?.source === 'USGS'
+      ? 'earthquakes'
+      : target?.source === 'RELIEFWEB'
+        ? 'reliefweb'
+        : target && isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
+    if (!target || activeSource !== targetSource) return;
 
     const frame = window.requestAnimationFrame(() => {
       const cardId = `advisory-${advisoryIdentity(target).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
       document.getElementById(cardId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [feed, highlightedAdvisoryId, activeSource]);
+  }, [feed, highlightedAdvisoryId, activeSource, scope]);
 
   const source = SOURCES.find((item) => item.id === activeSource) || SOURCES[0];
   const provider = feed?.providers?.[source.providerId];
   const events = useMemo(
     () => (feed?.events || [])
       .filter((event) => matchesSource(event, activeSource))
-    .filter(publishedToResidents),
-    [feed, activeSource]
+      .filter(publishedToResidents)
+      .filter((event) => matchesScope(event, scope)),
+    [feed, activeSource, scope]
   );
-  const alertCount = useMemo(
-    () => (feed?.events || [])
-      .filter((event) => matchesSource(event, 'gdacs'))
-      .filter(publishedToResidents).length,
-    [feed]
-  );
-  const nasaRateLimit = formatRateLimitCountdown(feed?.providers?.nasa_eonet?.rate_limit_until, now);
+  const rateLimitCountdown = formatRateLimitCountdown(provider?.rate_limit_until, now);
   const Icon = source.icon;
 
   return (
@@ -331,12 +385,12 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
               <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-sky-300">Regional intelligence</p>
               <h2 className="mt-1 text-lg font-extrabold text-white sm:text-xl">Official hazard advisories</h2>
               <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
-                Typhoon and regional multi-hazard alerts relevant to Oriental Mindoro.
+                Official hazard feeds cached by BayanAlert according to each integration's refresh interval.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:justify-end">
-            {lastUpdated && <span className="text-[10px] text-slate-500">Updated {lastUpdated.toLocaleTimeString()}</span>}
+            {lastUpdated && <span className="text-[10px] text-slate-500">Cache checked {lastUpdated.toLocaleTimeString()}</span>}
             <button
               type="button"
               onClick={() => loadFeed(true)}
@@ -349,12 +403,13 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {SOURCES.map((item) => {
             const ItemIcon = item.icon;
             const count = (feed?.events || []).filter((event) => (
               matchesSource(event, item.id) &&
-              publishedToResidents(event)
+              publishedToResidents(event) &&
+              matchesScope(event, scope)
             )).length;
             const itemProvider = feed?.providers?.[item.providerId];
             const selected = activeSource === item.id;
@@ -377,6 +432,9 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-bold text-white">{item.label}</span>
                     <span className="mt-1 block"><ProviderStatus provider={itemProvider} /></span>
+                    <span className="mt-1 block text-[9px] text-slate-500">
+                      Synced {itemProvider?.last_synced_at ? formatDate(itemProvider.last_synced_at) : 'not yet'}
+                    </span>
                   </span>
                 </span>
                 <span className={`shrink-0 text-xl font-extrabold ${selected ? 'text-sky-200' : 'text-slate-300'}`}>{count}</span>
@@ -387,6 +445,33 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
       </div>
 
       <div className="p-4 sm:p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950/60 p-1" role="group" aria-label="Advisory region">
+            {[
+              { value: 'regional', label: 'Regional (Oriental Mindoro)' },
+              { value: 'national', label: 'National (Philippines)' },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={scope === option.value}
+                onClick={() => setScope(option.value)}
+                className={`rounded-md px-3 py-2 text-[10px] font-semibold transition ${
+                  scope === option.value
+                    ? 'bg-orange-500/15 text-orange-300'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-500">
+            {events.length} parsed event{events.length === 1 ? '' : 's'}
+            {provider?.last_synced_at && ` · Last synced ${formatDate(provider.last_synced_at)}`}
+          </p>
+        </div>
+
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="flex items-center gap-2 text-sm font-bold text-white">
@@ -412,13 +497,13 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
           </div>
         ))}
 
-        {nasaRateLimit && (
+        {rateLimitCountdown && (
           <div role="status" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs font-semibold text-rose-200">
-            NASA EONET: {nasaRateLimit}
+            {rateLimitCountdown}
           </div>
         )}
 
-        {provider?.status === 'error' && !loading && (
+        {provider?.status === 'error' && !loading && !rateLimitCountdown && (
           <div role="status" className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">
             {provider.message || 'This provider could not be reached. The list below is not current.'}
           </div>
@@ -468,7 +553,6 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300/70" />
           <p>
             External advisories are informational and may be delayed or revised by the source. Follow official local instructions during emergencies.
-            {alertCount > 0 && ` ${alertCount} published regional ${alertCount === 1 ? 'advisory is' : 'advisories are'} shown across these feeds.`}
           </p>
         </div>
       </div>
