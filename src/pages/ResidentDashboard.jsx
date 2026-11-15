@@ -182,6 +182,7 @@ export function ResidentDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const highlightedAdvisoryId = new URLSearchParams(location.search).get('advisory_id') || '';
+  const highlightedReportId = new URLSearchParams(location.search).get('report_id') || '';
   const [dashboard, setDashboard] = useState(EMPTY_DASHBOARD);
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -200,6 +201,7 @@ export function ResidentDashboard() {
     () => localStorage.getItem(REPORT_PROMPT_SEEN_KEY) !== '1'
   );
   const knownAlertIds = useRef(null);
+  const autoOpenedReportId = useRef('');
   const [alertToast, setAlertToast] = useState(null);
 
   async function loadDashboard(showLoader = true) {
@@ -241,6 +243,27 @@ export function ResidentDashboard() {
     const timer = window.setInterval(() => loadDashboard(false), 60000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (
+      !hasLoaded ||
+      !highlightedReportId ||
+      autoOpenedReportId.current === highlightedReportId
+    ) return;
+    const reportFromFeed = dashboard.reports.find(
+      (item) => String(item.report_id) === highlightedReportId
+    );
+    const mapReport = location.state?.mapReport;
+    const report = reportFromFeed || (
+      mapReport && String(mapReport.report_id) === highlightedReportId
+        ? mapReport
+        : null
+    );
+    if (report) {
+      autoOpenedReportId.current = highlightedReportId;
+      setSelectedReport(report);
+    }
+  }, [dashboard.reports, hasLoaded, highlightedReportId, location.state]);
 
   useEffect(() => {
     let active = true;

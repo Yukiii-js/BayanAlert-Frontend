@@ -7,7 +7,7 @@ import {
   Tags, 
   LogOut, 
   User, 
-  Bell,
+  Megaphone,
   FileText,
   PlugZap,
 } from 'lucide-react';
@@ -125,8 +125,8 @@ export function Layout({ children }) {
                   }`
                 }
               >
-                <Bell className="w-4 h-4" />
-                Notifications
+                <Megaphone className="w-4 h-4" />
+                Announcements
               </NavLink>
             </nav>
           </div>

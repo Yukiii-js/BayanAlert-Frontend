@@ -137,9 +137,9 @@ export function Notifications() {
       <header className="flex flex-col justify-between gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-emerald-400">Admin communications</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">Notifications</h1>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">Announcements</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Review incoming report alerts and send announcements to active residents.
+            Send announcements to residents and review the admin notification inbox.
           </p>
         </div>
         <div className="flex items-center gap-3">

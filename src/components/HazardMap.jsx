@@ -1,6 +1,15 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
-import { AlertCircle, AlertTriangle, Loader2, MapPin, RefreshCw } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  MapPin,
+  RefreshCw,
+} from 'lucide-react';
 import { api } from '../api/client';
 import 'leaflet/dist/leaflet.css';
 
@@ -208,16 +217,32 @@ function popupContent(report) {
   root.className = 'hazard-map-popup';
 
   const title = document.createElement('strong');
-  title.textContent = 'Hazard report';
+  title.textContent = report.title || 'Hazard report';
   root.appendChild(title);
 
   const category = document.createElement('div');
-  category.textContent = report.category_name || 'Uncategorized';
+  category.textContent = `Category: ${report.category_name || 'Uncategorized'}`;
   root.appendChild(category);
 
   const status = document.createElement('span');
-  status.textContent = String(report.status || 'pending').replaceAll('_', ' ');
+  status.textContent = `Status: ${String(report.status || 'pending').replaceAll('_', ' ')}`;
   root.appendChild(status);
+
+  if (report.severity_level) {
+    const severity = document.createElement('span');
+    severity.textContent = `Severity: ${String(report.severity_level).replaceAll('_', ' ')}`;
+    root.appendChild(severity);
+  }
+
+  const descriptionText = String(report.description || '').trim();
+  if (descriptionText) {
+    const description = document.createElement('div');
+    description.className = 'hazard-map-popup__description';
+    description.textContent = descriptionText.length > 140
+      ? `${descriptionText.slice(0, 137)}...`
+      : descriptionText;
+    root.appendChild(description);
+  }
 
   return root;
 }
@@ -231,6 +256,8 @@ export function HazardMap({
   onLocationSelect,
   weather = null,
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const mapElement = useRef(null);
   const mapInstance = useRef(null);
   const markerLayer = useRef(null);
@@ -245,9 +272,9 @@ export function HazardMap({
     hdx: true,
     weather: true,
     emergencyServices: true,
-    potentialSites: true,
+    potentialSites: false,
   });
-  const [externalLayersOpen, setExternalLayersOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
   const [hdxStatus, setHdxStatus] = useState('loading');
   const [hdxError, setHdxError] = useState('');
   const [emergencyPlaces, setEmergencyPlaces] = useState([]);
@@ -610,9 +637,33 @@ export function HazardMap({
 
       const point = [latitude, longitude];
       points.push(point);
-      L.marker(point, { icon: markerIcon(report.status, report.severity_level) })
-        .bindPopup(popupContent(report))
-        .addTo(layer);
+      const marker = L.marker(point, { icon: markerIcon(report.status, report.severity_level) });
+      let popupWasOpened = false;
+      marker.on('click', (event) => {
+        if (!popupWasOpened) {
+          popupWasOpened = true;
+          return;
+        }
+
+        const reportId = report.report_id;
+        if (!reportId) return;
+        event.originalEvent?.stopPropagation();
+        event.originalEvent?.preventDefault();
+        const encodedId = encodeURIComponent(reportId);
+        if (location.pathname.startsWith('/admin')) {
+          navigate(`/admin/tables/hazard_reports?report_id=${encodedId}`);
+        } else if (location.pathname.startsWith('/resident')) {
+          navigate(`/resident?report_id=${encodedId}#incident-feed`, {
+            state: { mapReport: report },
+          });
+        } else {
+          navigate('/resident-login');
+        }
+      });
+      marker.on('popupclose', () => {
+        popupWasOpened = false;
+      });
+      marker.bindPopup(popupContent(report)).addTo(layer);
     });
 
     if (points.length > 0 && !hasFittedReports.current) {
@@ -621,7 +672,7 @@ export function HazardMap({
     } else if (points.length === 0 && !hasFittedReports.current) {
       map.setView(CALAPAN_CENTER, 13);
     }
-  }, [visibleReports]);
+  }, [location.pathname, navigate, visibleReports]);
 
   const statusLegend = [
     ['verified', 'Verified'],
@@ -639,13 +690,6 @@ export function HazardMap({
   const potentialSiteCount = placeCounts.potential_evacuation_site || 0;
   const facilityLegend = ['hospital', 'clinic', 'police', 'fire_station', 'evacuation_center']
     .filter((category) => placeCounts[category]);
-  const externalToggleCount = [
-    hdxStatus === 'available' && externalLayerState.hdx,
-    Boolean(weather?.current && externalLayerState.weather),
-    emergencyPlacesStatus === 'available' && externalLayerState.emergencyServices,
-    emergencyPlacesStatus === 'available' && externalLayerState.potentialSites,
-  ].filter(Boolean).length;
-
   return (
     <section id={id} className={`overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 ${className}`}>
       <div className="flex flex-col justify-between gap-4 border-b border-slate-800 p-5 sm:flex-row sm:items-center">
@@ -692,139 +736,175 @@ export function HazardMap({
           </Suspense>
         )}
         {!selectable && (
-          <div className="absolute right-3 top-3 z-[500]">
-            <button
-              type="button"
-              onClick={() => setExternalLayersOpen((current) => !current)}
-              className="rounded-full border border-slate-700 bg-slate-950/95 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-200 shadow-lg backdrop-blur-sm"
-            >
-              Layers ({externalToggleCount})
-            </button>
-            {externalLayersOpen && (
-              <div className="mt-2 w-64 rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl">
-                {[
-                  ...(weather?.current ? [['weather', 'Live weather animation']] : []),
-                  ['emergencyServices', `Emergency services${emergencyPlacesStatus === 'available' ? ` (${serviceCount})` : ''}`],
-                  ['potentialSites', `Possible evacuation sites${emergencyPlacesStatus === 'available' ? ` (${potentialSiteCount})` : ''}`],
-                  ['hdx', 'HDX barangay boundaries'],
-                ].map(([key, label]) => (
-                  <label key={key} className="mb-2 flex cursor-pointer items-center justify-between gap-3 text-[11px] text-slate-200 last:mb-0">
-                    <span>{label}</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(externalLayerState[key])}
-                      disabled={
-                        (key === 'hdx' && hdxStatus !== 'available') ||
-                        (['emergencyServices', 'potentialSites'].includes(key) && emergencyPlacesStatus !== 'available') ||
-                        (key === 'potentialSites' && potentialSiteCount === 0)
-                      }
-                      title={
-                        key === 'hdx' && hdxStatus !== 'available'
-                          ? hdxError || 'Loading the regional boundary dataset.'
-                          : ['emergencyServices', 'potentialSites'].includes(key) && emergencyPlacesStatus !== 'available'
-                            ? emergencyPlacesError || 'Loading Calapan emergency places.'
-                            : key === 'potentialSites' && potentialSiteCount === 0
-                              ? 'No potential sites are listed in this snapshot.'
-                              : undefined
-                      }
-                      onChange={() => setExternalLayerState((current) => ({ ...current, [key]: !current[key] }))}
-                      className="h-4 w-4 accent-emerald-500"
-                    />
-                  </label>
-                ))}
-                <p className={`mt-2 border-t border-slate-800 pt-2 text-[9px] leading-4 ${
-                  hdxStatus === 'available' && emergencyPlacesStatus === 'available'
-                    ? 'text-emerald-200/80'
-                    : 'text-amber-200/80'
-                }`}>
-                  {hdxStatus === 'loading'
-                    ? 'Loading the Calapan-only HDX boundary dataset…'
-                    : hdxStatus === 'available'
-                      ? 'Barangay boundaries: UN OCHA HDX · COD-AB PHL.'
-                      : hdxError || 'Regional boundary data is unavailable.'}
-                </p>
-                <p className={`mt-2 text-[9px] leading-4 ${
-                  emergencyPlacesStatus === 'available' ? 'text-slate-300' : 'text-amber-200/80'
-                }`}>
-                  {emergencyPlacesStatus === 'loading'
-                    ? 'Loading Calapan emergency places…'
-                    : emergencyPlacesStatus === 'available'
-                      ? (
-                        <>
-                          Emergency listings: {placeCounts.hospital || 0} hospitals · {placeCounts.clinic || 0} clinics · {placeCounts.police || 0} police · {placeCounts.fire_station || 0} fire stations · {placeCounts.evacuation_center || 0} designated evacuation centers. Fire contacts and the BFP pin need confirmation; {potentialSiteCount} possible evacuation sites are unverified and should be confirmed with Calapan City DRRMO.{' '}
-                          <a
-                            href="https://www.openstreetmap.org/copyright"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline underline-offset-2"
+          <>
+            <div className="absolute right-3 top-3 z-[500]">
+              <button
+                type="button"
+                aria-expanded={legendOpen}
+                aria-controls="hazard-map-legend"
+                onClick={() => setLegendOpen((current) => !current)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/95 px-3 py-1.5 text-[10px] font-bold text-slate-200 shadow-lg backdrop-blur-sm hover:border-emerald-500/50"
+              >
+                Map legend
+                {legendOpen
+                  ? <ChevronUp className="h-3 w-3" />
+                  : <ChevronDown className="h-3 w-3" />}
+              </button>
+              {legendOpen && (
+                <div
+                  id="hazard-map-legend"
+                  className="mt-2 max-h-[55vh] w-56 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl"
+                >
+                  <div className="space-y-2 text-[10px] text-slate-300">
+                    {statusLegend.map(([status, label]) => (
+                      <p key={status} className="flex items-center gap-2">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white shadow" style={{ backgroundColor: STATUS_COLORS[status] }}>
+                          <AlertTriangle className="h-3 w-3 text-white" />
+                        </span>
+                        {label}
+                      </p>
+                    ))}
+                    {hdxStatus === 'available' && externalLayerState.hdx && (
+                      <p className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 border border-orange-400 bg-orange-400/20" />
+                        Barangay boundary
+                      </p>
+                    )}
+                    {emergencyPlacesStatus === 'available' &&
+                      externalLayerState.emergencyServices &&
+                      facilityLegend.map((category) => {
+                        const marker = EMERGENCY_PLACE_STYLES[category];
+                        return (
+                          <p key={category} className="flex items-center gap-2">
+                            <span
+                              className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white text-[8px] font-bold text-white"
+                              style={{ backgroundColor: marker.color }}
+                            >
+                              {marker.symbol}
+                            </span>
+                            {marker.label}
+                          </p>
+                        );
+                      })}
+                    {emergencyPlacesStatus === 'available' &&
+                      externalLayerState.potentialSites &&
+                      potentialSiteCount > 0 && (
+                        <p className="flex items-center gap-2">
+                          <span
+                            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white text-[8px] font-bold text-white"
+                            style={{ backgroundColor: EMERGENCY_PLACE_STYLES.potential_evacuation_site.color }}
                           >
-                            © OpenStreetMap contributors
-                          </a>
-                          {emergencyPlacesError && (
-                            <span className="mt-1 block text-amber-200/80">{emergencyPlacesError}</span>
-                          )}
-                        </>
-                      )
-                      : emergencyPlacesError || 'Emergency place data is unavailable.'}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-        {!selectable && (
-          <div className={`pointer-events-none absolute right-3 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl transition-[top] duration-200 sm:right-5 ${
-            externalLayersOpen ? 'hidden' : 'top-14'
-          }`}>
-            <p className="mb-2 text-xs font-bold text-white">Map Legend</p>
-            <div className="space-y-2 text-[10px] text-slate-300">
-              {statusLegend.map(([status, label]) => (
-                <p key={status} className="flex items-center gap-2">
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white shadow" style={{ backgroundColor: STATUS_COLORS[status] }}>
-                    <AlertTriangle className="h-3 w-3 text-white" />
-                  </span>
-                  {label}
-                </p>
-              ))}
-              {hdxStatus === 'available' && externalLayerState.hdx && (
-                <p className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 border border-orange-400 bg-orange-400/20" />
-                  Barangay boundary
-                </p>
-              )}
-              {emergencyPlacesStatus === 'available' &&
-                externalLayerState.emergencyServices &&
-                facilityLegend.map((category) => {
-                  const marker = EMERGENCY_PLACE_STYLES[category];
-                  return (
-                    <p key={category} className="flex items-center gap-2">
-                      <span
-                        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white text-[8px] font-bold text-white"
-                        style={{ backgroundColor: marker.color }}
-                      >
-                        {marker.symbol}
-                      </span>
-                      {marker.label}
-                    </p>
-                  );
-                })}
-              {emergencyPlacesStatus === 'available' &&
-                externalLayerState.potentialSites &&
-                potentialSiteCount > 0 && (
-                  <p className="flex items-center gap-2">
-                    <span
-                      className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white text-[8px] font-bold text-white"
-                      style={{ backgroundColor: EMERGENCY_PLACE_STYLES.potential_evacuation_site.color }}
-                    >
-                      {EMERGENCY_PLACE_STYLES.potential_evacuation_site.symbol}
-                    </span>
-                    Possible site (unverified)
+                            {EMERGENCY_PLACE_STYLES.potential_evacuation_site.symbol}
+                          </span>
+                          Possible site (unverified)
+                        </p>
+                      )}
+                  </div>
+                  <p className={`mt-3 border-t border-slate-800 pt-2 text-[9px] leading-4 ${
+                    hdxStatus === 'available' ? 'text-emerald-200/80' : 'text-amber-200/80'
+                  }`}>
+                    {hdxStatus === 'loading'
+                      ? 'Loading Calapan barangay boundaries…'
+                      : hdxStatus === 'available'
+                        ? 'Barangay boundaries: UN OCHA HDX · COD-AB PHL.'
+                        : hdxError || 'Regional boundary data is unavailable.'}
                   </p>
-                )}
+                  <p className={`mt-2 text-[9px] leading-4 ${
+                    emergencyPlacesStatus === 'available' ? 'text-slate-300' : 'text-amber-200/80'
+                  }`}>
+                    {emergencyPlacesStatus === 'loading'
+                      ? 'Loading Calapan emergency places…'
+                      : emergencyPlacesStatus === 'available'
+                        ? (
+                          <>
+                            {placeCounts.hospital || 0} hospitals · {placeCounts.clinic || 0} clinics · {placeCounts.police || 0} police · {placeCounts.fire_station || 0} fire stations · {placeCounts.evacuation_center || 0} designated evacuation centers. Possible evacuation sites are unverified; confirm with Calapan City DRRMO.{' '}
+                            <a
+                              href="https://www.openstreetmap.org/copyright"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline underline-offset-2"
+                            >
+                              © OpenStreetMap contributors
+                            </a>
+                            {emergencyPlacesError && (
+                              <span className="mt-1 block text-amber-200/80">{emergencyPlacesError}</span>
+                            )}
+                          </>
+                        )
+                        : emergencyPlacesError || 'Emergency place data is unavailable.'}
+                  </p>
+                </div>
+              )}
             </div>
-          </div>
+            <div className="absolute inset-x-3 bottom-3 z-[500] grid grid-cols-2 gap-1.5 rounded-xl border border-slate-700 bg-slate-950/95 p-2 shadow-xl sm:grid-cols-4">
+              {[
+                {
+                  key: 'weather',
+                  label: 'Weather',
+                  detail: 'animation',
+                  disabled: !weather?.current,
+                  title: weather?.current ? undefined : 'Weather data is unavailable.',
+                },
+                {
+                  key: 'emergencyServices',
+                  label: 'Emergency',
+                  detail: `services${emergencyPlacesStatus === 'available' ? ` (${serviceCount})` : ''}`,
+                  disabled: emergencyPlacesStatus !== 'available',
+                  title: emergencyPlacesStatus === 'available'
+                    ? undefined
+                    : emergencyPlacesError || 'Loading Calapan emergency places.',
+                },
+                {
+                  key: 'potentialSites',
+                  label: 'Possible',
+                  detail: `evacuation sites${emergencyPlacesStatus === 'available' ? ` (${potentialSiteCount})` : ''}`,
+                  disabled: emergencyPlacesStatus !== 'available' || potentialSiteCount === 0,
+                  title: emergencyPlacesStatus !== 'available'
+                    ? emergencyPlacesError || 'Loading Calapan emergency places.'
+                    : potentialSiteCount === 0
+                      ? 'No potential sites are listed in this snapshot.'
+                      : undefined,
+                },
+                {
+                  key: 'hdx',
+                  label: 'HDX',
+                  detail: 'barangay boundaries',
+                  disabled: hdxStatus !== 'available',
+                  title: hdxStatus === 'available'
+                    ? undefined
+                    : hdxError || 'Loading the regional boundary dataset.',
+                },
+              ].map(({ key, label, detail, disabled, title }) => (
+                <label
+                  key={key}
+                  title={title}
+                  className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-[10px] text-slate-200 ${
+                    disabled
+                      ? 'cursor-not-allowed opacity-50'
+                      : 'cursor-pointer hover:bg-slate-800'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(externalLayerState[key])}
+                    disabled={disabled}
+                    onChange={(event) => setExternalLayerState((current) => ({
+                      ...current,
+                      [key]: event.target.checked,
+                    }))}
+                    className="h-4 w-4 shrink-0 accent-emerald-500"
+                  />
+                  <span className="min-w-0 truncate">
+                    <span className="font-semibold">{label}</span>{' '}
+                    <span className="text-slate-400">{detail}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </>
         )}
         {!selectable && (
-          <div className="absolute bottom-10 left-3 z-[500] rounded-lg border border-slate-700 bg-slate-950/90 px-3 py-2 text-[10px] text-slate-300 sm:bottom-3">
+          <div className="absolute left-3 top-20 z-[500] rounded-lg border border-slate-700 bg-slate-950/90 px-3 py-2 text-[10px] text-slate-300">
             <MapPin className="mr-1 inline h-3.5 w-3.5 text-emerald-400" />
             {visibleReports.length} mapped {visibleReports.length === 1 ? 'report' : 'reports'}
           </div>
@@ -836,7 +916,7 @@ export function HazardMap({
           </div>
         )}
         {!loading && !error && visibleReports.length === 0 && (
-          <div className="absolute bottom-20 left-1/2 z-[500] w-[min(90%,24rem)] -translate-x-1/2 rounded-xl border border-slate-700 bg-slate-950/95 p-4 text-center shadow-xl sm:bottom-14">
+          <div className="absolute left-1/2 top-1/2 z-[500] w-[min(90%,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-700 bg-slate-950/95 p-4 text-center shadow-xl">
             <p className="text-sm font-semibold text-slate-200">
               {mapData.coordinates_available ? 'No mapped hazard reports yet' : 'Map locations need database setup'}
             </p>
@@ -848,7 +928,7 @@ export function HazardMap({
           </div>
         )}
         {!loading && error && (
-          <div className="absolute bottom-20 left-1/2 z-[600] w-[min(90%,24rem)] -translate-x-1/2 rounded-xl border border-rose-500/30 bg-slate-950/95 p-4 text-center shadow-xl sm:bottom-14">
+          <div className="absolute left-1/2 top-1/2 z-[600] w-[min(90%,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-rose-500/30 bg-slate-950/95 p-4 text-center shadow-xl">
             <p className="flex items-center justify-center gap-2 text-sm font-semibold text-rose-300">
               <AlertCircle className="h-4 w-4" /> Map data unavailable
             </p>

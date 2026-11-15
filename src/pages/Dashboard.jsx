@@ -274,8 +274,6 @@ export function Dashboard() {
         </div>
       </div>
 
-      <ExternalAdvisories highlightedAdvisoryId={highlightedAdvisoryId} />
-
       {refreshError && (
         <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
           Latest refresh failed. Showing the last successful snapshot: {refreshError}
@@ -396,6 +394,8 @@ export function Dashboard() {
         <HazardMap className="min-w-0" height="h-[420px]" weather={weather} />
         <CalapanWeather onWeatherChange={setWeather} showReminder={false} />
       </div>
+
+      <ExternalAdvisories highlightedAdvisoryId={highlightedAdvisoryId} />
 
       {/* Database Registers & Recent Reports */}
       <div className="grid grid-cols-1 gap-8">

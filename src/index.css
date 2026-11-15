@@ -85,6 +85,12 @@ body {
   font-size: 13px;
 }
 
+.hazard-map-popup__description {
+  max-width: 220px;
+  line-height: 1.35;
+  text-transform: none;
+}
+
 .weather-lottie-marker {
   overflow: visible;
   border: 0;
