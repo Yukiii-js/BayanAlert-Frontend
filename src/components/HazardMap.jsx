@@ -18,6 +18,15 @@ const STATUS_COLORS = {
   in_progress: '#818cf8',
 };
 const BARANGAY_DATA_URL = '/data/calapan_barangays.geojson';
+const EMERGENCY_PLACES_DATA_URL = '/data/calapan_emergency_places.geojson';
+const EMERGENCY_PLACE_STYLES = {
+  hospital: { label: 'Hospital', symbol: 'H', color: '#dc2626' },
+  clinic: { label: 'Clinic / health center', symbol: '+', color: '#e11d48' },
+  police: { label: 'Police / law enforcement', symbol: 'P', color: '#2563eb' },
+  fire_station: { label: 'Fire station', symbol: 'F', color: '#ea580c' },
+  evacuation_center: { label: 'OSM-tagged evacuation center', symbol: 'E', color: '#059669' },
+  potential_evacuation_site: { label: 'Possible site (unverified)', symbol: '?', color: '#7c3aed' },
+};
 
 function getBarangayName(feature) {
   const properties = feature?.properties || {};
@@ -66,6 +75,57 @@ function hasValidRegionalGeometry(geometry) {
   return hasRegionalCoordinate && !hasInvalidCoordinate;
 }
 
+function emergencyPlaceIcon(category) {
+  const marker = EMERGENCY_PLACE_STYLES[category] || EMERGENCY_PLACE_STYLES.potential_evacuation_site;
+  return L.divIcon({
+    className: 'emergency-place-marker',
+    html: `<span style="display:inline-flex;width:27px;height:27px;align-items:center;justify-content:center;border:2px solid white;border-radius:50%;background:${marker.color};box-shadow:0 2px 6px rgba(15,23,42,.65);color:white;font-size:11px;font-weight:800">${marker.symbol}</span>`,
+    iconSize: [27, 27],
+    iconAnchor: [13, 13],
+  });
+}
+
+function emergencyPlacePopupContent(place) {
+  const properties = place.properties || {};
+  const category = EMERGENCY_PLACE_STYLES[properties.category] || EMERGENCY_PLACE_STYLES.potential_evacuation_site;
+  const root = document.createElement('div');
+  root.className = 'hazard-map-popup';
+
+  const title = document.createElement('strong');
+  title.textContent = properties.name || category.label;
+  root.appendChild(title);
+
+  const placeType = document.createElement('div');
+  placeType.textContent = category.label;
+  root.appendChild(placeType);
+
+  if (properties.category === 'potential_evacuation_site') {
+    const caution = document.createElement('span');
+    caution.textContent = 'Possible site only — not confirmed as an official evacuation center. Verify with Calapan City DRRMO before relying on it.';
+    root.appendChild(caution);
+  }
+
+  [['address', 'Address'], ['phone', 'Phone'], ['opening_hours', 'Hours']].forEach(([key, label]) => {
+    if (!properties[key]) return;
+    const detail = document.createElement('div');
+    detail.textContent = `${label}: ${properties[key]}`;
+    root.appendChild(detail);
+  });
+
+  const osmTypes = ['node', 'way', 'relation'];
+  const osmId = Number(properties.osm_id);
+  if (osmTypes.includes(properties.osm_type) && Number.isInteger(osmId) && osmId > 0) {
+    const link = document.createElement('a');
+    link.href = `https://www.openstreetmap.org/${properties.osm_type}/${osmId}`;
+    link.target = '_blank';
+    link.rel = 'noreferrer';
+    link.textContent = 'View OpenStreetMap record';
+    root.appendChild(link);
+  }
+
+  return root;
+}
+
 function markerIcon(status) {
   const color = STATUS_COLORS[String(status || '').toLowerCase()] || '#94a3b8';
   return L.divIcon({
@@ -109,16 +169,23 @@ export function HazardMap({
   const markerLayer = useRef(null);
   const selectionLayer = useRef(null);
   const barangayLayer = useRef(null);
+  const emergencyServicesLayer = useRef(null);
+  const potentialSitesLayer = useRef(null);
   const hasFittedReports = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapData, setMapData] = useState({ reports: [], categories: [], coordinates_available: false });
   const [externalLayerState, setExternalLayerState] = useState({
-    hdx: false,
+    hdx: true,
     weather: true,
+    emergencyServices: true,
+    potentialSites: true,
   });
   const [externalLayersOpen, setExternalLayersOpen] = useState(false);
   const [hdxStatus, setHdxStatus] = useState('loading');
   const [hdxError, setHdxError] = useState('');
+  const [emergencyPlaces, setEmergencyPlaces] = useState([]);
+  const [emergencyPlacesStatus, setEmergencyPlacesStatus] = useState('loading');
+  const [emergencyPlacesError, setEmergencyPlacesError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -189,6 +256,8 @@ export function HazardMap({
       markerLayer.current = null;
       selectionLayer.current = null;
       barangayLayer.current = null;
+      emergencyServicesLayer.current = null;
+      potentialSitesLayer.current = null;
     };
   }, []);
 
@@ -279,6 +348,104 @@ export function HazardMap({
 
   useEffect(() => {
     const map = mapInstance.current;
+    if (!map || !mapReady || selectable) return undefined;
+    let active = true;
+
+    async function loadEmergencyPlaces() {
+      setEmergencyPlacesStatus('loading');
+      setEmergencyPlacesError('');
+      try {
+        const response = await fetch(EMERGENCY_PLACES_DATA_URL, { cache: 'force-cache' });
+        if (!response.ok) {
+          throw new Error(`The emergency places GeoJSON returned HTTP ${response.status}.`);
+        }
+        const collection = await response.json();
+        if (collection?.type !== 'FeatureCollection' || !Array.isArray(collection.features)) {
+          throw new Error('The emergency places file is not a valid GeoJSON FeatureCollection.');
+        }
+
+        const categories = Object.keys(EMERGENCY_PLACE_STYLES);
+        const features = collection.features.filter((feature) => {
+          const coordinates = feature?.geometry?.coordinates;
+          const longitude = Number(coordinates?.[0]);
+          const latitude = Number(coordinates?.[1]);
+          return feature?.type === 'Feature' &&
+            feature.geometry?.type === 'Point' &&
+            categories.includes(feature.properties?.category) &&
+            typeof feature.properties?.name === 'string' &&
+            feature.properties.name.trim().length > 0 &&
+            Number.isFinite(latitude) &&
+            Number.isFinite(longitude) &&
+            CALAPAN_BOUNDS.contains([latitude, longitude]);
+        });
+        if (features.length !== collection.features.length) {
+          throw new Error('The emergency places dataset contains unnamed, invalid, or out-of-area locations.');
+        }
+        if (!features.length) {
+          throw new Error('The emergency places dataset has no valid Calapan City locations.');
+        }
+
+        if (!active) return;
+        if (!map.getPane('emergencyPlaces')) {
+          const pane = map.createPane('emergencyPlaces');
+          pane.style.zIndex = '430';
+        }
+
+        const services = features.filter((feature) => feature.properties.category !== 'potential_evacuation_site');
+        const potentialSites = features.filter((feature) => feature.properties.category === 'potential_evacuation_site');
+        emergencyServicesLayer.current = L.layerGroup(services.map((feature) => {
+          const [longitude, latitude] = feature.geometry.coordinates;
+          return L.marker([latitude, longitude], {
+            icon: emergencyPlaceIcon(feature.properties.category),
+            pane: 'emergencyPlaces',
+          })
+            .bindTooltip(feature.properties.name, { direction: 'top', offset: [0, -12] })
+            .bindPopup(emergencyPlacePopupContent(feature));
+        }));
+        potentialSitesLayer.current = L.layerGroup(potentialSites.map((feature) => {
+          const [longitude, latitude] = feature.geometry.coordinates;
+          return L.marker([latitude, longitude], {
+            icon: emergencyPlaceIcon(feature.properties.category),
+            pane: 'emergencyPlaces',
+          })
+            .bindTooltip(feature.properties.name, { direction: 'top', offset: [0, -12] })
+            .bindPopup(emergencyPlacePopupContent(feature));
+        }));
+
+        setEmergencyPlaces(features);
+        setEmergencyPlacesStatus('available');
+      } catch (loadError) {
+        if (!active) return;
+        setEmergencyPlacesStatus('unavailable');
+        setEmergencyPlacesError(loadError.message || 'Emergency places could not be loaded.');
+      }
+    }
+
+    loadEmergencyPlaces();
+    return () => {
+      active = false;
+      if (emergencyServicesLayer.current) {
+        map.removeLayer(emergencyServicesLayer.current);
+        emergencyServicesLayer.current = null;
+      }
+      if (potentialSitesLayer.current) {
+        map.removeLayer(potentialSitesLayer.current);
+        potentialSitesLayer.current = null;
+      }
+    };
+  }, [mapReady, selectable]);
+
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || emergencyPlacesStatus !== 'available') return;
+    if (externalLayerState.emergencyServices) emergencyServicesLayer.current?.addTo(map);
+    else if (emergencyServicesLayer.current) map.removeLayer(emergencyServicesLayer.current);
+    if (externalLayerState.potentialSites) potentialSitesLayer.current?.addTo(map);
+    else if (potentialSitesLayer.current) map.removeLayer(potentialSitesLayer.current);
+  }, [emergencyPlacesStatus, externalLayerState.emergencyServices, externalLayerState.potentialSites, mapReady]);
+
+  useEffect(() => {
+    const map = mapInstance.current;
     const layer = barangayLayer.current;
     if (!map || !layer || hdxStatus !== 'available') return;
     if (externalLayerState.hdx) layer.addTo(map);
@@ -360,9 +527,22 @@ export function HazardMap({
     ['pending', 'Pending'],
     ['disputed', 'Disputed'],
   ];
+  const placeCounts = emergencyPlaces.reduce((counts, feature) => {
+    const category = feature.properties.category;
+    counts[category] = (counts[category] || 0) + 1;
+    return counts;
+  }, {});
+  const serviceCount = emergencyPlaces.filter(
+    (feature) => feature.properties.category !== 'potential_evacuation_site'
+  ).length;
+  const potentialSiteCount = placeCounts.potential_evacuation_site || 0;
+  const facilityLegend = ['hospital', 'clinic', 'police', 'fire_station', 'evacuation_center']
+    .filter((category) => placeCounts[category]);
   const externalToggleCount = [
     hdxStatus === 'available' && externalLayerState.hdx,
     Boolean(weather?.current && externalLayerState.weather),
+    emergencyPlacesStatus === 'available' && externalLayerState.emergencyServices,
+    emergencyPlacesStatus === 'available' && externalLayerState.potentialSites,
   ].filter(Boolean).length;
 
   return (
@@ -420,31 +600,68 @@ export function HazardMap({
               Layers ({externalToggleCount})
             </button>
             {externalLayersOpen && (
-              <div className="mt-2 w-56 rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl">
+              <div className="mt-2 w-64 rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl">
                 {[
                   ...(weather?.current ? [['weather', 'Live weather animation']] : []),
-                  ['hdx', hdxStatus === 'available' ? 'HDX barangay boundaries' : 'HDX barangay boundaries'],
+                  ['emergencyServices', `Emergency services${emergencyPlacesStatus === 'available' ? ` (${serviceCount})` : ''}`],
+                  ['potentialSites', `Possible evacuation sites${emergencyPlacesStatus === 'available' ? ` (${potentialSiteCount})` : ''}`],
+                  ['hdx', 'HDX barangay boundaries'],
                 ].map(([key, label]) => (
                   <label key={key} className="mb-2 flex cursor-pointer items-center justify-between gap-3 text-[11px] text-slate-200 last:mb-0">
                     <span>{label}</span>
                     <input
                       type="checkbox"
                       checked={Boolean(externalLayerState[key])}
-                      disabled={key === 'hdx' && hdxStatus !== 'available'}
-                      title={key === 'hdx' && hdxStatus !== 'available' ? hdxError || 'Loading the regional boundary dataset.' : undefined}
+                      disabled={
+                        (key === 'hdx' && hdxStatus !== 'available') ||
+                        (['emergencyServices', 'potentialSites'].includes(key) && emergencyPlacesStatus !== 'available') ||
+                        (key === 'potentialSites' && potentialSiteCount === 0)
+                      }
+                      title={
+                        key === 'hdx' && hdxStatus !== 'available'
+                          ? hdxError || 'Loading the regional boundary dataset.'
+                          : ['emergencyServices', 'potentialSites'].includes(key) && emergencyPlacesStatus !== 'available'
+                            ? emergencyPlacesError || 'Loading Calapan emergency places.'
+                            : key === 'potentialSites' && potentialSiteCount === 0
+                              ? 'No potential sites are listed in this snapshot.'
+                              : undefined
+                      }
                       onChange={() => setExternalLayerState((current) => ({ ...current, [key]: !current[key] }))}
                       className="h-4 w-4 accent-emerald-500"
                     />
                   </label>
                 ))}
                 <p className={`mt-2 border-t border-slate-800 pt-2 text-[9px] leading-4 ${
-                  hdxStatus === 'available' ? 'text-emerald-200/80' : 'text-amber-200/80'
+                  hdxStatus === 'available' && emergencyPlacesStatus === 'available'
+                    ? 'text-emerald-200/80'
+                    : 'text-amber-200/80'
                 }`}>
                   {hdxStatus === 'loading'
                     ? 'Loading the Calapan-only HDX boundary dataset…'
                     : hdxStatus === 'available'
-                      ? 'UN OCHA HDX · COD-AB PHL · Regional GeoJSON'
+                      ? 'Barangay boundaries: UN OCHA HDX · COD-AB PHL.'
                       : hdxError || 'Regional boundary data is unavailable.'}
+                </p>
+                <p className={`mt-2 text-[9px] leading-4 ${
+                  emergencyPlacesStatus === 'available' ? 'text-slate-300' : 'text-amber-200/80'
+                }`}>
+                  {emergencyPlacesStatus === 'loading'
+                    ? 'Loading Calapan emergency places…'
+                    : emergencyPlacesStatus === 'available'
+                      ? (
+                        <>
+                          OSM-tagged listings: {placeCounts.hospital || 0} hospitals · {placeCounts.clinic || 0} clinics · {placeCounts.police || 0} police · {placeCounts.fire_station || 0} fire stations · {placeCounts.evacuation_center || 0} designated evacuation centers. {potentialSiteCount} possible evacuation sites are unverified; confirm with Calapan City DRRMO before relying on them.{' '}
+                          <a
+                            href="https://www.openstreetmap.org/copyright"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline underline-offset-2"
+                          >
+                            © OpenStreetMap contributors
+                          </a>
+                        </>
+                      )
+                      : emergencyPlacesError || 'Emergency place data is unavailable.'}
                 </p>
               </div>
             )}
@@ -452,7 +669,7 @@ export function HazardMap({
         )}
         {!selectable && (
           <div className={`pointer-events-none absolute right-3 z-[500] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl transition-[top] duration-200 sm:right-5 ${
-            externalLayersOpen ? 'top-40' : 'top-14'
+            externalLayersOpen ? 'hidden' : 'top-14'
           }`}>
             <p className="mb-2 text-xs font-bold text-white">Map Legend</p>
             <div className="space-y-2 text-[10px] text-slate-300">
@@ -468,6 +685,35 @@ export function HazardMap({
                   Barangay boundary
                 </p>
               )}
+              {emergencyPlacesStatus === 'available' &&
+                externalLayerState.emergencyServices &&
+                facilityLegend.map((category) => {
+                  const marker = EMERGENCY_PLACE_STYLES[category];
+                  return (
+                    <p key={category} className="flex items-center gap-2">
+                      <span
+                        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white text-[8px] font-bold text-white"
+                        style={{ backgroundColor: marker.color }}
+                      >
+                        {marker.symbol}
+                      </span>
+                      {marker.label}
+                    </p>
+                  );
+                })}
+              {emergencyPlacesStatus === 'available' &&
+                externalLayerState.potentialSites &&
+                potentialSiteCount > 0 && (
+                  <p className="flex items-center gap-2">
+                    <span
+                      className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white text-[8px] font-bold text-white"
+                      style={{ backgroundColor: EMERGENCY_PLACE_STYLES.potential_evacuation_site.color }}
+                    >
+                      {EMERGENCY_PLACE_STYLES.potential_evacuation_site.symbol}
+                    </span>
+                    Possible site (unverified)
+                  </p>
+                )}
             </div>
           </div>
         )}
