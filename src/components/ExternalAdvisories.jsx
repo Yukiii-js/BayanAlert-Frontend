@@ -3,7 +3,6 @@ import {
   Activity,
   AlertTriangle,
   CloudLightning,
-  CloudRain,
   Clock3,
   ExternalLink,
   MapPin,
@@ -43,16 +42,6 @@ const SOURCES = [
     description: 'GeoJSON earthquake events in and around the Philippines.',
     emptyTitle: 'No recent earthquakes',
     emptyDescription: 'No matching USGS earthquake events are available for this view.',
-  },
-  {
-    id: 'weather',
-    label: 'Local weather',
-    providerId: 'open_meteo',
-    icon: CloudRain,
-    heading: 'Open-Meteo weather conditions',
-    description: 'Current and forecast rainfall, wind speed, and gusts for Calapan City.',
-    emptyTitle: 'Weather conditions unavailable',
-    emptyDescription: 'No current Calapan City conditions are available.',
   },
 ];
 
@@ -108,8 +97,7 @@ function matchesSource(event, sourceId) {
   if (sourceId === 'gdacs') {
     return (eventSource === 'gdacs' && !isTyphoonEvent(event)) || eventSource === 'usgs';
   }
-  if (sourceId === 'earthquakes') return eventSource === 'usgs';
-  return sourceId === 'weather' && eventSource === 'open_meteo';
+  return sourceId === 'earthquakes' && eventSource === 'usgs';
 }
 
 function displayHazardType(value) {
@@ -119,23 +107,13 @@ function displayHazardType(value) {
     TC: 'Tropical Cyclone',
     TYPHOON: 'Tropical Cyclone',
     EARTHQUAKE: 'Earthquake',
-    RAINFALL: 'Heavy Rainfall',
-    WEATHER: 'Weather Conditions',
-    WIND: 'Strong Wind',
-    'SEVERE-WEATHER': 'Severe Weather',
   };
   return labels[normalized] || hazardType || 'Alert';
 }
 
 function sourceLabel(value) {
   const source = String(value || '').toUpperCase();
-  if (source === 'OPEN_METEO') return 'Open-Meteo';
   return source || 'GDACS';
-}
-
-function formatWeatherMetric(value, unit) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? `${numericValue.toFixed(1)} ${unit}` : '—';
 }
 
 function ProviderStatus({ provider }) {
@@ -164,7 +142,7 @@ function publishedToResidents(event) {
   if ([0, '0', false].includes(event.is_published_to_residents)) return false;
 
   const source = String(event.source || '').toLowerCase();
-  return ['gdacs', 'usgs', 'open_meteo'].includes(source)
+  return ['gdacs', 'usgs'].includes(source)
     && (event.is_philippines_event === true ||
       (event.distance_to_municipality_km !== null && event.distance_to_municipality_km !== undefined &&
         Number.isFinite(Number(event.distance_to_municipality_km))));
@@ -224,7 +202,6 @@ function advisoryIdentity(event) {
 
 function EventCard({ event, highlighted }) {
   const severity = eventSeverity(event);
-  const weather = event.weather_details;
   const alertLabel = String(event.alert_level || '').toUpperCase() === 'NORMAL'
     ? 'Normal conditions'
     : `${event.alert_level || severity} alert`;
@@ -293,21 +270,6 @@ function EventCard({ event, highlighted }) {
         )}
       </div>
 
-      {weather ? (
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            ['Temperature', weather.temperature_c, '°C'],
-            ['Rainfall (current/forecast max)', weather.precipitation_mm, 'mm'],
-            ['Wind speed', weather.wind_speed_kmh, 'km/h'],
-            ['Wind gusts', weather.wind_gust_kmh, 'km/h'],
-          ].map(([label, value, unit]) => (
-            <div key={label} className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-              <p className="mt-1 text-sm font-extrabold text-slate-100">{formatWeatherMetric(value, unit)}</p>
-            </div>
-          ))}
-        </div>
-      ) : (
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded-lg border border-slate-800/80 bg-slate-900/70 p-3">
           <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Alert level</p>
@@ -330,7 +292,6 @@ function EventCard({ event, highlighted }) {
           </p>
         </div>
       </div>
-      )}
     </article>
   );
 }
@@ -383,9 +344,7 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
 
     const targetSource = target.source === 'USGS'
       ? 'earthquakes'
-      : target.source === 'OPEN_METEO'
-        ? 'weather'
-        : isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
+      : isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
     if (activeSource !== targetSource) setActiveSource(targetSource);
     const distance = Number(target.distance_to_municipality_km);
     if (!Number.isFinite(distance) || distance > 150) setScope('regional');
@@ -398,9 +357,7 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
     );
     const targetSource = target?.source === 'USGS'
       ? 'earthquakes'
-      : target?.source === 'OPEN_METEO'
-        ? 'weather'
-        : target && isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
+      : target && isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
     if (!target || activeSource !== targetSource) return;
 
     const frame = window.requestAnimationFrame(() => {
@@ -452,157 +409,165 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {SOURCES.map((item) => {
-            const ItemIcon = item.icon;
-            const count = (feed?.events || []).filter((event) => (
-              matchesSource(event, item.id) &&
-              publishedToResidents(event) &&
-              matchesScope(event, scope)
-            )).length;
-            const itemProvider = feed?.providers?.[item.providerId];
-            const selected = activeSource === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveSource(item.id)}
-                aria-pressed={selected}
-                className={`flex min-w-0 items-center justify-between gap-3 rounded-xl border p-3 text-left transition sm:p-4 ${
-                  selected
-                    ? 'border-sky-400/30 bg-sky-400/10 shadow-lg shadow-sky-950/20'
-                    : 'border-slate-800 bg-slate-950/50 hover:border-slate-700'
-                }`}
-              >
-                <span className="flex min-w-0 items-center gap-3">
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-sky-400/10 text-sky-300' : 'bg-slate-800 text-slate-400'}`}>
+      </div>
+
+      <div className="grid gap-5 p-4 sm:p-6 lg:grid-cols-[250px_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-24 lg:self-start lg:border-r lg:border-slate-800 lg:pr-5">
+          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-orange-300">
+            Hazard advisories
+          </p>
+          <div className="mt-3 space-y-2">
+            {SOURCES.map((item) => {
+              const ItemIcon = item.icon;
+              const count = (feed?.events || []).filter((event) => (
+                matchesSource(event, item.id) &&
+                publishedToResidents(event) &&
+                matchesScope(event, scope)
+              )).length;
+              const itemProvider = feed?.providers?.[item.providerId];
+              const selected = activeSource === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveSource(item.id)}
+                  aria-pressed={selected}
+                  className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                    selected
+                      ? 'border-orange-500/40 bg-gradient-to-r from-orange-500/10 to-emerald-500/5 shadow-lg shadow-orange-950/10'
+                      : 'border-slate-800 bg-slate-950/50 hover:border-slate-700'
+                  }`}
+                >
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    selected ? 'bg-orange-500/10 text-orange-300' : 'bg-slate-800 text-slate-400'
+                  }`}>
                     <ItemIcon className="h-4 w-4" />
                   </span>
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-bold text-white">{item.label}</span>
                     <span className="mt-1 block"><ProviderStatus provider={itemProvider} /></span>
                     <span className="mt-1 block text-[9px] text-slate-500">
                       Synced {itemProvider?.last_synced_at ? formatDate(itemProvider.last_synced_at) : 'not yet'}
                     </span>
                   </span>
-                </span>
-                <span className={`shrink-0 text-xl font-extrabold ${selected ? 'text-sky-200' : 'text-slate-300'}`}>{count}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="p-4 sm:p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950/60 p-1" role="group" aria-label="Advisory region">
-            {[
-              { value: 'local', label: 'Oriental Mindoro (Local)' },
-              { value: 'regional', label: 'Philippines / PAR (Regional)' },
-            ].map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={scope === option.value}
-                onClick={() => setScope(option.value)}
-                className={`rounded-md px-3 py-2 text-[10px] font-semibold transition ${
-                  scope === option.value
-                    ? 'bg-orange-500/15 text-orange-300'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+                  <span className={`shrink-0 text-lg font-extrabold ${selected ? 'text-orange-200' : 'text-slate-300'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <p className="text-[10px] text-slate-500">
-            {events.length} parsed event{events.length === 1 ? '' : 's'}
-            {provider?.last_synced_at && ` · Last synced ${formatDate(provider.last_synced_at)}`}
-          </p>
-        </div>
+        </aside>
 
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="flex items-center gap-2 text-sm font-bold text-white">
-              <Icon className="h-4 w-4 text-sky-300" />
-              {source.heading}
-            </h3>
-            <p className="mt-1 text-[10px] text-slate-500">
-              {source.description}
+        <div className="min-w-0">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950/60 p-1" role="group" aria-label="Advisory region">
+              {[
+                { value: 'local', label: 'Oriental Mindoro (Local)' },
+                { value: 'regional', label: 'Philippines / PAR (Regional)' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={scope === option.value}
+                  onClick={() => setScope(option.value)}
+                  className={`rounded-md px-3 py-2 text-[10px] font-semibold transition ${
+                    scope === option.value
+                      ? 'bg-orange-500/15 text-orange-300'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-500">
+              {events.length} parsed event{events.length === 1 ? '' : 's'}
+              {provider?.last_synced_at && ` · Last synced ${formatDate(provider.last_synced_at)}`}
             </p>
           </div>
-          {provider && <ProviderStatus provider={provider} />}
-        </div>
 
-        {error && (
-          <div role="alert" className="mb-4 flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-200">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" />
-            <span>{error}</span>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/30 p-4">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-bold text-white">
+                <Icon className="h-4 w-4 text-orange-300" />
+                {source.heading}
+              </h3>
+              <p className="mt-1 text-[10px] text-slate-500">{source.description}</p>
+            </div>
+            {provider && <ProviderStatus provider={provider} />}
           </div>
-        )}
-        {feed?.warnings?.map((warning) => (
-          <div key={warning} role="status" className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">
-            {warning}
-          </div>
-        ))}
 
-        {rateLimitCountdown && (
-          <div role="status" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs font-semibold text-rose-200">
-            {rateLimitCountdown}
-          </div>
-        )}
+          {error && (
+            <div role="alert" className="mb-4 flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" />
+              <span>{error}</span>
+            </div>
+          )}
+          {feed?.warnings?.map((warning) => (
+            <div key={warning} role="status" className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">
+              {warning}
+            </div>
+          ))}
 
-        {provider?.status === 'error' && !loading && !rateLimitCountdown && (
-          <div role="status" className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">
-            {provider.message || 'This provider could not be reached. The list below is not current.'}
-          </div>
-        )}
+          {rateLimitCountdown && (
+            <div role="status" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs font-semibold text-rose-200">
+              {rateLimitCountdown}
+            </div>
+          )}
 
-        {loading ? (
-          <div className="flex min-h-40 items-center justify-center gap-2 text-xs text-slate-400">
-            <RefreshCw className="h-4 w-4 animate-spin text-sky-300" />
-            Loading official advisories…
-          </div>
-        ) : events.length ? (
-          <div className="space-y-3">
-            {events.map((event) => (
-              <EventCard
-                key={event.id || `${event.source}-${event.event_timestamp}-${event.title}`}
-                event={event}
-                highlighted={advisoryIdentity(event) === String(highlightedAdvisoryId)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-10 text-center">
-            <Icon className="mx-auto h-7 w-7 text-slate-600" />
-            <p className="mt-3 text-sm font-semibold text-slate-300">
-              {provider?.status === 'error' ? 'Advisories unavailable' : source.emptyTitle}
+          {provider?.status === 'error' && !loading && !rateLimitCountdown && (
+            <div role="status" className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">
+              {provider.message || 'This provider could not be reached. The list below is not current.'}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex min-h-40 items-center justify-center gap-2 text-xs text-slate-400">
+              <RefreshCw className="h-4 w-4 animate-spin text-sky-300" />
+              Loading official advisories…
+            </div>
+          ) : events.length ? (
+            <div className="space-y-3">
+              {events.map((event) => (
+                <EventCard
+                  key={event.id || `${event.source}-${event.event_timestamp}-${event.title}`}
+                  event={event}
+                  highlighted={advisoryIdentity(event) === String(highlightedAdvisoryId)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-10 text-center">
+              <Icon className="mx-auto h-7 w-7 text-slate-600" />
+              <p className="mt-3 text-sm font-semibold text-slate-300">
+                {provider?.status === 'error' ? 'Advisories unavailable' : source.emptyTitle}
+              </p>
+              <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-slate-500">
+                {provider?.status === 'error'
+                  ? 'Try refreshing later. Provider outages are shown as unavailable rather than replaced with sample events.'
+                  : source.emptyDescription}
+              </p>
+              {provider?.status === 'error' && (
+                <button
+                  type="button"
+                  onClick={() => loadFeed(true)}
+                  disabled={refreshing}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-sky-400/40 hover:text-white disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                  Retry feed
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 flex items-start gap-2 border-t border-slate-800 pt-4 text-[10px] leading-5 text-slate-500">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300/70" />
+            <p>
+              External advisories are informational and may be delayed or revised by the source. Follow official local instructions during emergencies.
             </p>
-            <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-slate-500">
-              {provider?.status === 'error'
-                ? 'Try refreshing later. Provider outages are shown as unavailable rather than replaced with sample events.'
-                : source.emptyDescription}
-            </p>
-            {provider?.status === 'error' && (
-              <button
-                type="button"
-                onClick={() => loadFeed(true)}
-                disabled={refreshing}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-sky-400/40 hover:text-white disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                Retry feed
-              </button>
-            )}
           </div>
-        )}
-
-        <div className="mt-4 flex items-start gap-2 border-t border-slate-800 pt-4 text-[10px] leading-5 text-slate-500">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300/70" />
-          <p>
-            External advisories are informational and may be delayed or revised by the source. Follow official local instructions during emergencies.
-          </p>
         </div>
       </div>
     </section>
