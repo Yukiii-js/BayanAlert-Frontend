@@ -169,6 +169,20 @@ export default function SubmittedReports({ view = 'submit' }) {
     loadPageData();
   }, []);
 
+  useEffect(() => {
+    const reportId = new URLSearchParams(location.search).get('report_id');
+    if (!reportId || loading) return;
+
+    const report = reports.find((item) => String(item.report_id) === reportId);
+    if (!report) {
+      setPageError(`Report ${reportId} is not available in your report history.`);
+      return;
+    }
+
+    setPageError('');
+    setSelectedReport(report);
+  }, [location.search, reports, loading]);
+
   const filteredReports = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 

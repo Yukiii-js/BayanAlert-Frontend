@@ -34,10 +34,11 @@ body {
   border: 0;
 }
 
-.hazard-map-marker > span {
+.hazard-map-marker__badge {
+  position: relative;
   display: flex;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   align-items: center;
   justify-content: center;
   border: 2px solid white;
@@ -46,11 +47,30 @@ body {
   box-shadow: 0 3px 10px rgb(0 0 0 / 40%);
 }
 
-.hazard-map-marker > span > span {
-  width: 9px;
-  height: 9px;
-  border: 2px solid white;
+.hazard-map-marker__badge--pulse::after {
+  position: absolute;
+  inset: -5px;
+  border: 2px solid var(--marker-color);
   border-radius: 50%;
+  animation: hazard-marker-pulse 1.8s ease-out infinite;
+  content: '';
+  pointer-events: none;
+}
+
+@keyframes hazard-marker-pulse {
+  0% { opacity: 0.75; transform: scale(0.75); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+
+.emergency-place-marker {
+  border: 0;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hazard-map-marker__badge--pulse::after {
+    animation: none;
+  }
 }
 
 .hazard-map-popup {

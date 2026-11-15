@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   Bell,
@@ -21,6 +22,7 @@ function isRead(notification) {
 }
 
 export function Notifications() {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
@@ -91,7 +93,7 @@ export function Notifications() {
   }
 
   async function handleMarkRead(notification) {
-    if (isRead(notification)) return;
+    if (isRead(notification)) return true;
     setMarkingId(notification.notification_id);
     setError('');
     try {
@@ -102,11 +104,32 @@ export function Notifications() {
           : item
       )));
       window.dispatchEvent(new Event('notifications:updated'));
+      return true;
     } catch (requestError) {
       setError(requestError.message || 'Unable to update this notification.');
+      return false;
     } finally {
       setMarkingId(null);
     }
+  }
+
+  async function handleOpenNotification(notification) {
+    if (markingId !== null) return;
+    if (!isRead(notification) && !(await handleMarkRead(notification))) return;
+    const targetType = notification.target_type ||
+      (notification.report_id ? 'report' : notification.notification_type === 'external_hazard' ? 'advisory' : '');
+    if (targetType === 'report' && notification.report_id) {
+      navigate(`/admin/tables/hazard_reports?report_id=${encodeURIComponent(notification.report_id)}`);
+      return;
+    }
+    if (targetType === 'advisory') {
+      const advisoryId = notification.advisory_id
+        ? `?advisory_id=${encodeURIComponent(notification.advisory_id)}`
+        : '';
+      navigate(`/admin${advisoryId}#regional-advisories`);
+      return;
+    }
+    navigate('/admin/notifications');
   }
 
   return (
@@ -231,14 +254,19 @@ export function Notifications() {
               {notifications.map((notification) => (
                 <article
                   key={notification.notification_id}
-                  className={`flex items-start gap-3 p-4 ${isRead(notification) ? '' : 'bg-emerald-500/[0.04]'}`}
+                  className={`flex items-start gap-3 p-4 transition hover:bg-slate-800/70 ${isRead(notification) ? '' : 'bg-emerald-500/[0.04]'}`}
                 >
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-emerald-300">
                     {notification.notification_type === 'announcement'
                       ? <Megaphone className="h-4 w-4" />
                       : <Bell className="h-4 w-4" />}
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenNotification(notification)}
+                    disabled={markingId !== null}
+                    className="min-w-0 flex-1 cursor-pointer text-left disabled:cursor-wait"
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-semibold text-white">{notification.title}</h3>
                       {!isRead(notification) && (
@@ -249,7 +277,7 @@ export function Notifications() {
                     </div>
                     <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-slate-400">{notification.message}</p>
                     <p className="mt-2 text-[10px] text-slate-500">{formatDate(notification.created_at)}</p>
-                  </div>
+                  </button>
                   {!isRead(notification) && (
                     <button
                       type="button"

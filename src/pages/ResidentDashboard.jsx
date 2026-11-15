@@ -28,6 +28,7 @@ import { HazardMap } from '../components/HazardMap';
 import { CalapanWeather } from '../components/CalapanWeather';
 import { ExternalAdvisories } from '../components/ExternalAdvisories';
 import { BrandLogo } from '../components/BrandLogo';
+import { NotificationDropdown } from '../components/NotificationDropdown';
 
 const EMPTY_DASHBOARD = {
   reports: [],
@@ -180,6 +181,7 @@ export function ResidentDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const highlightedAdvisoryId = new URLSearchParams(location.search).get('advisory_id') || '';
   const [dashboard, setDashboard] = useState(EMPTY_DASHBOARD);
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -276,9 +278,11 @@ export function ResidentDashboard() {
 
     loadAlerts();
     const timer = window.setInterval(loadAlerts, 30000);
+    window.addEventListener('notifications:updated', loadAlerts);
     return () => {
       active = false;
       window.clearInterval(timer);
+      window.removeEventListener('notifications:updated', loadAlerts);
     };
   }, []);
 
@@ -347,6 +351,7 @@ export function ResidentDashboard() {
             : item
         )),
       }));
+      window.dispatchEvent(new Event('notifications:updated'));
     } catch (requestError) {
       setNotificationError(requestError.message || 'Unable to mark this alert as read.');
     }
@@ -573,6 +578,7 @@ export function ResidentDashboard() {
               <User className="h-3.5 w-3.5 text-emerald-400" />
               {user?.full_name || 'Resident'}
             </span>
+            <NotificationDropdown role="resident" />
             <button
               type="button"
               onClick={handleLogout}
@@ -711,7 +717,7 @@ export function ResidentDashboard() {
             />
           </div>
 
-          <ExternalAdvisories />
+          <ExternalAdvisories highlightedAdvisoryId={highlightedAdvisoryId} />
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 xl:col-span-2">

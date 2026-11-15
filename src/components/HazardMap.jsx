@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
-import { AlertCircle, Loader2, MapPin, RefreshCw } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
 import 'leaflet/dist/leaflet.css';
 
@@ -19,6 +19,7 @@ const STATUS_COLORS = {
 };
 const BARANGAY_DATA_URL = '/data/calapan_barangays.geojson';
 const EMERGENCY_PLACES_DATA_URL = '/data/calapan_emergency_places.geojson';
+const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';
 const EMERGENCY_PLACE_STYLES = {
   hospital: { label: 'Hospital', symbol: 'H', color: '#dc2626' },
   clinic: { label: 'Clinic / health center', symbol: '+', color: '#e11d48' },
@@ -77,12 +78,60 @@ function hasValidRegionalGeometry(geometry) {
 
 function emergencyPlaceIcon(category) {
   const marker = EMERGENCY_PLACE_STYLES[category] || EMERGENCY_PLACE_STYLES.potential_evacuation_site;
+  const shelter = ['evacuation_center', 'potential_evacuation_site'].includes(category);
+  const glyph = shelter
+    ? '<svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 4l9 6.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-6h4v6"/><path d="M2.5 13h3"/><path d="m3.5 11.5-1 1.5 1 1.5"/></svg>'
+    : `<span style="font-size:11px;font-weight:800">${marker.symbol}</span>`;
+  const uncertainty = category === 'potential_evacuation_site'
+    ? '<span style="position:absolute;right:-4px;top:-4px;display:inline-flex;width:12px;height:12px;align-items:center;justify-content:center;border:1px solid white;border-radius:50%;background:#7c3aed;color:white;font-size:8px;font-weight:800">?</span>'
+    : '';
   return L.divIcon({
     className: 'emergency-place-marker',
-    html: `<span style="display:inline-flex;width:27px;height:27px;align-items:center;justify-content:center;border:2px solid white;border-radius:50%;background:${marker.color};box-shadow:0 2px 6px rgba(15,23,42,.65);color:white;font-size:11px;font-weight:800">${marker.symbol}</span>`,
-    iconSize: [27, 27],
-    iconAnchor: [13, 13],
+    html: `<span style="position:relative;display:inline-flex;width:32px;height:32px;align-items:center;justify-content:center;border:2px solid white;border-radius:50%;background:${shelter ? '#059669' : marker.color};box-shadow:0 2px 8px rgba(15,23,42,.7);color:white">${glyph}${uncertainty}</span>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
   });
+}
+
+function overpassFireStationFeatures(elements) {
+  return elements.flatMap((element) => {
+    const tags = element?.tags || {};
+    const latitude = Number(element?.lat ?? element?.center?.lat);
+    const longitude = Number(element?.lon ?? element?.center?.lon);
+    if ((!tags.amenity || tags.amenity !== 'fire_station') &&
+        (!tags.emergency || tags.emergency !== 'fire_station')) return [];
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+        !CALAPAN_BOUNDS.contains([latitude, longitude])) return [];
+
+    const address = [
+      tags['addr:street'],
+      tags['addr:suburb'] || tags['addr:place'],
+      tags['addr:city'],
+    ].filter(Boolean).join(', ');
+    const id = Number(element.id);
+    return [{
+      type: 'Feature',
+      properties: {
+        category: 'fire_station',
+        name: tags.name || tags['name:en'] || 'Unnamed fire station',
+        address: address || undefined,
+        phone: tags.phone || tags['contact:phone'] || undefined,
+        opening_hours: tags.opening_hours || undefined,
+        osm_type: element.type,
+        osm_id: Number.isInteger(id) && id > 0 ? id : undefined,
+        source_tags: tags,
+      },
+      geometry: { type: 'Point', coordinates: [longitude, latitude] },
+    }];
+  });
+}
+
+function isNearbyDuplicateFireStation(existing, candidate) {
+  const [longitude, latitude] = existing.geometry.coordinates;
+  const [candidateLongitude, candidateLatitude] = candidate.geometry.coordinates;
+  return existing.properties.category === 'fire_station' &&
+    Math.abs(latitude - candidateLatitude) < 0.0005 &&
+    Math.abs(longitude - candidateLongitude) < 0.0005;
 }
 
 function emergencyPlacePopupContent(place) {
@@ -105,12 +154,27 @@ function emergencyPlacePopupContent(place) {
     root.appendChild(caution);
   }
 
+  if (properties.contact_status === 'user_provided_unverified') {
+    const caution = document.createElement('span');
+    caution.textContent = 'Contact details and map location were provided by a user and have not been independently verified. Confirm with BFP before relying on them.';
+    root.appendChild(caution);
+  }
+
   [['address', 'Address'], ['phone', 'Phone'], ['opening_hours', 'Hours']].forEach(([key, label]) => {
     if (!properties[key]) return;
     const detail = document.createElement('div');
     detail.textContent = `${label}: ${properties[key]}`;
     root.appendChild(detail);
   });
+
+  if (Array.isArray(properties.alternate_contacts)) {
+    properties.alternate_contacts.forEach((contact) => {
+      if (!contact || typeof contact.name !== 'string' || typeof contact.phone !== 'string') return;
+      const detail = document.createElement('div');
+      detail.textContent = `${contact.name} — ${contact.phone} (city-wide contact; location not verified)`;
+      root.appendChild(detail);
+    });
+  }
 
   const osmTypes = ['node', 'way', 'relation'];
   const osmId = Number(properties.osm_id);
@@ -126,13 +190,16 @@ function emergencyPlacePopupContent(place) {
   return root;
 }
 
-function markerIcon(status) {
-  const color = STATUS_COLORS[String(status || '').toLowerCase()] || '#94a3b8';
+function markerIcon(status, severity) {
+  const normalizedStatus = String(status || '').toLowerCase();
+  const color = STATUS_COLORS[normalizedStatus] || '#94a3b8';
+  const highSeverity = /^(high|critical|severe|red)$/i.test(String(severity || ''));
+  const pulse = normalizedStatus === 'verified' || highSeverity;
   return L.divIcon({
     className: 'hazard-map-marker',
-    html: `<span style="--marker-color:${color}"><span></span></span>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    html: `<span class="hazard-map-marker__badge${pulse ? ' hazard-map-marker__badge--pulse' : ''}" style="--marker-color:${color}"><svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3l-7.5-13.1a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 16h.01"/></svg></span>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
   });
 }
 
@@ -350,6 +417,7 @@ export function HazardMap({
     const map = mapInstance.current;
     if (!map || !mapReady || selectable) return undefined;
     let active = true;
+    let overpassController = null;
 
     async function loadEmergencyPlaces() {
       setEmergencyPlacesStatus('loading');
@@ -385,6 +453,37 @@ export function HazardMap({
           throw new Error('The emergency places dataset has no valid Calapan City locations.');
         }
 
+        let liveLookupWarning = '';
+        overpassController = new AbortController();
+        const timeout = window.setTimeout(() => overpassController?.abort(), 8000);
+        try {
+          const query = '[out:json][timeout:7];area["name"~"^Calapan( City)?$"]["boundary"="administrative"]->.calapan;(nwr["amenity"="fire_station"](area.calapan);nwr["emergency"="fire_station"](area.calapan););out center tags;';
+          const overpassResponse = await fetch(OVERPASS_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({ data: query }),
+            signal: overpassController.signal,
+          });
+          if (!overpassResponse.ok) {
+            throw new Error(`Overpass returned HTTP ${overpassResponse.status}.`);
+          }
+          const overpassData = await overpassResponse.json();
+          if (!Array.isArray(overpassData?.elements)) {
+            throw new Error('Overpass returned an invalid response.');
+          }
+          const liveStations = overpassFireStationFeatures(overpassData.elements);
+          liveStations.forEach((station) => {
+            if (!features.some((existing) => isNearbyDuplicateFireStation(existing, station))) {
+              features.push(station);
+            }
+          });
+        } catch {
+          liveLookupWarning = 'Live OSM fire-station lookup is unavailable; showing the local snapshot.';
+        } finally {
+          window.clearTimeout(timeout);
+          overpassController = null;
+        }
+
         if (!active) return;
         if (!map.getPane('emergencyPlaces')) {
           const pane = map.createPane('emergencyPlaces');
@@ -414,6 +513,7 @@ export function HazardMap({
 
         setEmergencyPlaces(features);
         setEmergencyPlacesStatus('available');
+        setEmergencyPlacesError(liveLookupWarning);
       } catch (loadError) {
         if (!active) return;
         setEmergencyPlacesStatus('unavailable');
@@ -424,6 +524,7 @@ export function HazardMap({
     loadEmergencyPlaces();
     return () => {
       active = false;
+      overpassController?.abort();
       if (emergencyServicesLayer.current) {
         map.removeLayer(emergencyServicesLayer.current);
         emergencyServicesLayer.current = null;
@@ -509,7 +610,7 @@ export function HazardMap({
 
       const point = [latitude, longitude];
       points.push(point);
-      L.marker(point, { icon: markerIcon(report.status) })
+      L.marker(point, { icon: markerIcon(report.status, report.severity_level) })
         .bindPopup(popupContent(report))
         .addTo(layer);
     });
@@ -650,7 +751,7 @@ export function HazardMap({
                     : emergencyPlacesStatus === 'available'
                       ? (
                         <>
-                          OSM-tagged listings: {placeCounts.hospital || 0} hospitals · {placeCounts.clinic || 0} clinics · {placeCounts.police || 0} police · {placeCounts.fire_station || 0} fire stations · {placeCounts.evacuation_center || 0} designated evacuation centers. {potentialSiteCount} possible evacuation sites are unverified; confirm with Calapan City DRRMO before relying on them.{' '}
+                          Emergency listings: {placeCounts.hospital || 0} hospitals · {placeCounts.clinic || 0} clinics · {placeCounts.police || 0} police · {placeCounts.fire_station || 0} fire stations · {placeCounts.evacuation_center || 0} designated evacuation centers. Fire contacts and the BFP pin need confirmation; {potentialSiteCount} possible evacuation sites are unverified and should be confirmed with Calapan City DRRMO.{' '}
                           <a
                             href="https://www.openstreetmap.org/copyright"
                             target="_blank"
@@ -659,6 +760,9 @@ export function HazardMap({
                           >
                             © OpenStreetMap contributors
                           </a>
+                          {emergencyPlacesError && (
+                            <span className="mt-1 block text-amber-200/80">{emergencyPlacesError}</span>
+                          )}
                         </>
                       )
                       : emergencyPlacesError || 'Emergency place data is unavailable.'}
@@ -675,7 +779,9 @@ export function HazardMap({
             <div className="space-y-2 text-[10px] text-slate-300">
               {statusLegend.map(([status, label]) => (
                 <p key={status} className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[status] }} />
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white shadow" style={{ backgroundColor: STATUS_COLORS[status] }}>
+                    <AlertTriangle className="h-3 w-3 text-white" />
+                  </span>
                   {label}
                 </p>
               ))}

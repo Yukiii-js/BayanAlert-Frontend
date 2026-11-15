@@ -48,6 +48,15 @@ function formatDate(value) {
     : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function formatRateLimitCountdown(value, now) {
+  if (!value) return '';
+  const date = new Date(String(value).replace(' ', 'T') + (String(value).endsWith('Z') ? '' : 'Z'));
+  const until = date.getTime();
+  if (!Number.isFinite(until) || until <= now) return '';
+  const seconds = Math.ceil((until - now) / 1000);
+  return `Limit reached — available again in ${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
+}
+
 function eventSeverity(event) {
   const level = String(event.severity_level || event.alert_level || 'green').toLowerCase();
   if (level.includes('red')) return 'red';
@@ -140,13 +149,25 @@ function normalizeFeedResponse(response) {
   };
 }
 
-function EventCard({ event }) {
+function advisoryIdentity(event) {
+  return String(event.advisory_id || event.id || event.external_event_id || '');
+}
+
+function EventCard({ event, highlighted }) {
   const severity = eventSeverity(event);
   const distance = Number(event.distance_to_municipality_km);
   const location = eventLocation(event);
+  const cardId = `advisory-${advisoryIdentity(event).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
   return (
-    <article className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 sm:p-5">
+    <article
+      id={cardId}
+      className={`scroll-mt-32 rounded-xl border bg-slate-950/70 p-4 transition sm:p-5 ${
+        highlighted
+          ? 'border-amber-400 ring-2 ring-amber-400/40 shadow-lg shadow-amber-950/20'
+          : 'border-slate-800 hover:border-slate-700'
+      }`}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -218,13 +239,19 @@ function EventCard({ event }) {
   );
 }
 
-export function ExternalAdvisories() {
+export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
   const [feed, setFeed] = useState(null);
   const [activeSource, setActiveSource] = useState('typhoons');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function loadFeed(isRefresh = false) {
     if (isRefresh) setRefreshing(true);
@@ -250,6 +277,31 @@ export function ExternalAdvisories() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!feed || !highlightedAdvisoryId) return;
+    const target = (feed.events || []).find(
+      (event) => advisoryIdentity(event) === String(highlightedAdvisoryId)
+    );
+    if (!target) return;
+
+    const targetSource = isTyphoonEvent(target) ? 'typhoons' : 'gdacs';
+    if (activeSource !== targetSource) setActiveSource(targetSource);
+  }, [feed, highlightedAdvisoryId, activeSource]);
+
+  useEffect(() => {
+    if (!feed || !highlightedAdvisoryId) return;
+    const target = (feed.events || []).find(
+      (event) => advisoryIdentity(event) === String(highlightedAdvisoryId)
+    );
+    if (!target || activeSource !== (isTyphoonEvent(target) ? 'typhoons' : 'gdacs')) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const cardId = `advisory-${advisoryIdentity(target).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+      document.getElementById(cardId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [feed, highlightedAdvisoryId, activeSource]);
+
   const source = SOURCES.find((item) => item.id === activeSource) || SOURCES[0];
   const provider = feed?.providers?.[source.providerId];
   const events = useMemo(
@@ -264,6 +316,7 @@ export function ExternalAdvisories() {
       .filter(publishedToResidents).length,
     [feed]
   );
+  const nasaRateLimit = formatRateLimitCountdown(feed?.providers?.nasa_eonet?.rate_limit_until, now);
   const Icon = source.icon;
 
   return (
@@ -359,6 +412,12 @@ export function ExternalAdvisories() {
           </div>
         ))}
 
+        {nasaRateLimit && (
+          <div role="status" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs font-semibold text-rose-200">
+            NASA EONET: {nasaRateLimit}
+          </div>
+        )}
+
         {provider?.status === 'error' && !loading && (
           <div role="status" className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">
             {provider.message || 'This provider could not be reached. The list below is not current.'}
@@ -373,7 +432,11 @@ export function ExternalAdvisories() {
         ) : events.length ? (
           <div className="space-y-3">
             {events.map((event) => (
-              <EventCard key={event.id || `${event.source}-${event.event_timestamp}-${event.title}`} event={event} />
+              <EventCard
+                key={event.id || `${event.source}-${event.event_timestamp}-${event.title}`}
+                event={event}
+                highlighted={advisoryIdentity(event) === String(highlightedAdvisoryId)}
+              />
             ))}
           </div>
         ) : (

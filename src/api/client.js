@@ -136,6 +136,12 @@ export const api = {
   getExternalApiHealth: () => request('/admin/external-apis'),
   syncExternalApi: (key) => request(`/admin/external-apis/${key}/sync`, { method: 'POST' }),
   updateExternalApi: (key, payload) => request(`/admin/external-apis/${key}/config`, { method: 'PATCH', body: payload }),
+  getSystemApis: () => request('/admin/system-apis'),
+  createSystemApi: (payload) => request('/admin/system-apis', { method: 'POST', body: payload }),
+  updateSystemApi: (id, payload) => request(`/admin/system-apis/${id}`, { method: 'PUT', body: payload }),
+  testSystemApi: (id) => request(`/admin/system-apis/${id}/test`, { method: 'POST' }),
+  resetSystemApi: (id) => request(`/admin/system-apis/${id}/reset`, { method: 'POST' }),
+  deleteSystemApi: (id) => request(`/admin/system-apis/${id}`, { method: 'DELETE' }),
   toggleExternalEventVisibility: (id, isPublished) => request(`/admin/external-events/${id}/visibility`, {
     method: 'PATCH',
     body: { is_published_to_residents: isPublished },

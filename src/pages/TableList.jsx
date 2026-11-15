@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -22,6 +22,7 @@ import {
 
 export function TableList() {
   const { table } = useParams();
+  const location = useLocation();
   const { user } = useAuth();
 
   const [data, setData] = useState(null);
@@ -55,6 +56,28 @@ export function TableList() {
     setError('');
     loadTableData(1, '');
   }, [table]);
+
+  useEffect(() => {
+    const reportId = new URLSearchParams(location.search).get('report_id');
+    if (table !== 'hazard_reports' || !reportId) return undefined;
+    let active = true;
+
+    async function loadTargetReport() {
+      try {
+        const response = await api.getRecord(table, reportId);
+        const record = response?.data?.record;
+        if (!record) throw new Error('The requested report was not returned by the API.');
+        if (active) setSelectedRecord(record);
+      } catch (requestError) {
+        if (active) setError(requestError.message || 'Unable to open the referenced report.');
+      }
+    }
+
+    loadTargetReport();
+    return () => {
+      active = false;
+    };
+  }, [table, location.search]);
 
   const handleSearch = (e) => {
     e.preventDefault();

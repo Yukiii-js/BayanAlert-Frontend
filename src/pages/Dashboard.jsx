@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, publicFileUrl } from '../api/client';
 import { 
@@ -78,6 +78,8 @@ function EvidencePreview({ evidence, alt, className }) {
 }
 
 export function Dashboard() {
+  const location = useLocation();
+  const highlightedAdvisoryId = new URLSearchParams(location.search).get('advisory_id') || '';
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -272,7 +274,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <ExternalAdvisories />
+      <ExternalAdvisories highlightedAdvisoryId={highlightedAdvisoryId} />
 
       {refreshError && (
         <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
