@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -18,6 +18,7 @@ const SOURCES = [
     label: 'Typhoons',
     providerId: 'typhoon',
     icon: CloudLightning,
+    shortDescription: 'GDACS tropical cyclone feed',
     heading: 'Typhoon advisories',
     description: 'GDACS tropical cyclone alerts for the Philippines and nearby region.',
     emptyTitle: 'No active typhoon advisories',
@@ -28,6 +29,7 @@ const SOURCES = [
     label: 'Multi-hazard alerts',
     providerId: 'gdacs',
     icon: Radio,
+    shortDescription: 'GDACS and USGS regional alerts',
     heading: 'Regional multi-hazard alerts',
     description: 'GDACS alerts and USGS earthquakes with severity, location, and source details.',
     emptyTitle: 'No qualifying regional advisories',
@@ -38,6 +40,7 @@ const SOURCES = [
     label: 'Earthquakes',
     providerId: 'usgs',
     icon: Activity,
+    shortDescription: 'USGS seismic events',
     heading: 'USGS earthquake feed',
     description: 'GeoJSON earthquake events in and around the Philippines.',
     emptyTitle: 'No recent earthquakes',
@@ -116,11 +119,35 @@ function sourceLabel(value) {
   return source || 'GDACS';
 }
 
-function ProviderStatus({ provider }) {
+function ProviderStatus({ provider, compact = false }) {
   const status = String(provider?.status || 'unknown').toLowerCase();
   const isOnline = status === 'online' || status === 'success';
   const isUnavailable = status === 'error' || status === 'offline';
   const isDisabled = status === 'disabled';
+  const dotClass = isOnline
+    ? 'bg-emerald-400'
+    : isUnavailable
+      ? 'bg-rose-400'
+      : isDisabled
+        ? 'bg-slate-500'
+        : 'bg-amber-300';
+  const label = isOnline
+    ? 'Connected'
+    : isUnavailable
+      ? 'Unavailable'
+      : isDisabled
+        ? 'Disabled'
+        : 'Not synced';
+
+  if (compact) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[9px] font-medium text-slate-400">
+        <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+        {label}
+      </span>
+    );
+  }
+
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider ${
       isOnline
@@ -131,7 +158,7 @@ function ProviderStatus({ provider }) {
             ? 'border-slate-700 bg-slate-800 text-slate-400'
             : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
     }`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : isUnavailable ? 'bg-rose-400' : isDisabled ? 'bg-slate-500' : 'bg-amber-300'}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
       {isOnline ? 'Feed connected' : isUnavailable ? 'Feed unavailable' : isDisabled ? 'Feed disabled' : 'Status unavailable'}
     </span>
   );
@@ -305,6 +332,7 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const eventListRef = useRef(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -362,7 +390,15 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
 
     const frame = window.requestAnimationFrame(() => {
       const cardId = `advisory-${advisoryIdentity(target).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-      document.getElementById(cardId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const container = eventListRef.current;
+      const card = document.getElementById(cardId);
+      if (!container || !card) return;
+      const containerTop = container.getBoundingClientRect().top;
+      const cardTop = card.getBoundingClientRect().top;
+      container.scrollTo({
+        top: container.scrollTop + cardTop - containerTop - (container.clientHeight - card.clientHeight) / 2,
+        behavior: 'smooth',
+      });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [feed, highlightedAdvisoryId, activeSource, scope]);
@@ -412,11 +448,17 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
       </div>
 
       <div className="grid gap-5 p-4 sm:p-6 lg:grid-cols-[250px_minmax(0,1fr)]">
-        <aside className="lg:sticky lg:top-24 lg:self-start lg:border-r lg:border-slate-800 lg:pr-5">
-          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-orange-300">
-            Hazard advisories
-          </p>
-          <div className="mt-3 space-y-2">
+        <aside
+          aria-label="Hazard advisory feeds"
+          className="lg:sticky lg:top-24 lg:self-start lg:border-r lg:border-slate-800 lg:pr-5"
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-orange-300">
+              Hazard advisories
+            </p>
+            <span className="text-[9px] font-medium text-slate-500">{SOURCES.length} feeds</span>
+          </div>
+          <div className="space-y-2.5">
             {SOURCES.map((item) => {
               const ItemIcon = item.icon;
               const count = (feed?.events || []).filter((event) => (
@@ -432,25 +474,44 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
                   type="button"
                   onClick={() => setActiveSource(item.id)}
                   aria-pressed={selected}
-                  className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                  className={`group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border p-3 text-left transition ${
                     selected
-                      ? 'border-orange-500/40 bg-gradient-to-r from-orange-500/10 to-emerald-500/5 shadow-lg shadow-orange-950/10'
-                      : 'border-slate-800 bg-slate-950/50 hover:border-slate-700'
+                      ? 'border-orange-500/40 bg-gradient-to-br from-orange-500/10 via-slate-950/70 to-emerald-500/5 shadow-lg shadow-orange-950/10'
+                      : 'border-slate-800/90 bg-slate-950/45 hover:border-slate-700 hover:bg-slate-900/70'
                   }`}
                 >
+                  <span className={`absolute inset-y-2 left-0 w-0.5 rounded-r-full transition ${
+                    selected ? 'bg-gradient-to-b from-orange-400 to-emerald-400' : 'bg-transparent'
+                  }`} />
                   <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                    selected ? 'bg-orange-500/10 text-orange-300' : 'bg-slate-800 text-slate-400'
+                    selected
+                      ? 'border border-orange-400/20 bg-orange-500/10 text-orange-300'
+                      : 'border border-slate-700/70 bg-slate-800/80 text-slate-400 group-hover:text-slate-200'
                   }`}>
                     <ItemIcon className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-bold text-white">{item.label}</span>
-                    <span className="mt-1 block"><ProviderStatus provider={itemProvider} /></span>
-                    <span className="mt-1 block text-[9px] text-slate-500">
-                      Synced {itemProvider?.last_synced_at ? formatDate(itemProvider.last_synced_at) : 'not yet'}
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-xs font-bold text-white">{item.label}</span>
+                      {selected && (
+                        <span className="shrink-0 rounded-full bg-orange-500/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-orange-300">
+                          Viewing
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[9px] text-slate-500">{item.shortDescription}</span>
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <ProviderStatus provider={itemProvider} compact />
+                      <span className="text-[8px] text-slate-600">
+                        {itemProvider?.last_synced_at ? formatDate(itemProvider.last_synced_at) : 'Never synced'}
+                      </span>
                     </span>
                   </span>
-                  <span className={`shrink-0 text-lg font-extrabold ${selected ? 'text-orange-200' : 'text-slate-300'}`}>
+                  <span className={`flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg border px-1.5 text-sm font-extrabold ${
+                    selected
+                      ? 'border-orange-400/20 bg-orange-500/10 text-orange-200'
+                      : 'border-slate-700/70 bg-slate-900 text-slate-300'
+                  }`}>
                     {count}
                   </span>
                 </button>
@@ -528,7 +589,12 @@ export function ExternalAdvisories({ highlightedAdvisoryId = '' }) {
               Loading official advisories…
             </div>
           ) : events.length ? (
-            <div className="space-y-3">
+            <div
+              ref={eventListRef}
+              role="region"
+              aria-label={`${source.heading} results`}
+              className="max-h-[55vh] space-y-3 overflow-y-auto overscroll-contain pr-2 lg:max-h-[65vh]"
+            >
               {events.map((event) => (
                 <EventCard
                   key={event.id || `${event.source}-${event.event_timestamp}-${event.title}`}
