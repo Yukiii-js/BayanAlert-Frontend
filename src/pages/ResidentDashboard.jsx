@@ -90,7 +90,7 @@ function ResidentReportPrompt({ onDismiss }) {
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-400">
               Help keep Calapan safe
             </p>
             <h2 id="resident-report-prompt-title" className="mt-2 text-xl font-extrabold text-white">
@@ -113,7 +113,7 @@ function ResidentReportPrompt({ onDismiss }) {
           to="/resident/submitted-reports"
           state={{ openCreateReport: true }}
           onClick={onDismiss}
-          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-500"
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-sm font-bold text-slate-950 shadow-md shadow-orange-500/20 transition hover:from-orange-400 hover:to-amber-400"
         >
           <PlusCircle className="h-4 w-4" />
           Submit Report
@@ -499,7 +499,7 @@ export function ResidentDashboard() {
             <button
               type="button"
               onClick={() => loadDashboard()}
-              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500"
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-md shadow-orange-500/20 transition hover:from-orange-400 hover:to-amber-400"
             >
               <RefreshCw className="h-4 w-4" />
               Retry
@@ -514,16 +514,17 @@ export function ResidentDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-slate-700/80 bg-slate-900/80 shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur-xl after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-orange-500/40 after:to-transparent">
+    <div className="min-h-screen bg-[#080E1E] text-slate-100">
+      <header className="sticky top-0 z-30 border-b border-transparent bg-[#080E1E]/90 shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur-xl after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-orange-500/50 after:via-cyan-500/30 after:to-slate-800/80">
         <div className="mx-auto flex min-h-[64px] max-w-[1500px] items-center justify-between gap-3 px-4 lg:px-7">
           <Link to="/resident" className="flex shrink-0 items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center">
-              <BrandLogo className="h-10 w-10" />
+            <span className="relative flex h-10 w-10 items-center justify-center">
+              <span className="absolute inset-0 rounded-full bg-gradient-to-tr from-orange-500/20 via-amber-500/10 to-cyan-500/15 blur-lg" />
+              <BrandLogo className="relative h-10 w-10" />
             </span>
             <span>
               <span className="block text-sm font-extrabold">BayanAlert</span>
-              <span className="block text-[9px] font-semibold uppercase tracking-wider text-emerald-400">
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-orange-400">
                 Community safety
               </span>
             </span>
@@ -537,14 +538,14 @@ export function ResidentDashboard() {
                 onClick={() => scrollToSection(id)}
                 className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
                   activeSection === id
-                    ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                    ? 'border border-orange-500/30 bg-gradient-to-r from-orange-500/15 to-emerald-500/10 text-white'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
               >
                 <Icon className="h-4 w-4" />
                 {label}
                 {id === 'alerts' && unreadAlerts > 0 && (
-                  <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                  <span className="rounded-full bg-gradient-to-r from-orange-500 to-emerald-500 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">
                     {unreadAlerts > 99 ? '99+' : unreadAlerts}
                   </span>
                 )}
@@ -556,7 +557,7 @@ export function ResidentDashboard() {
               aria-current={location.pathname === '/resident/submitted-reports' ? 'page' : undefined}
               className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
                 location.pathname === '/resident/submitted-reports'
-                  ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                  ? 'border border-orange-500/30 bg-gradient-to-r from-orange-500/15 to-emerald-500/10 text-white'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               }`}
             >
@@ -568,7 +569,7 @@ export function ResidentDashboard() {
               aria-current={location.pathname === '/resident/report-history' ? 'page' : undefined}
               className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
                 location.pathname === '/resident/report-history'
-                  ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                  ? 'border border-orange-500/30 bg-gradient-to-r from-orange-500/15 to-emerald-500/10 text-white'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               }`}
             >
@@ -582,7 +583,7 @@ export function ResidentDashboard() {
                 onClick={() => scrollToSection(id)}
                 className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
                   activeSection === id
-                    ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                    ? 'border border-orange-500/30 bg-gradient-to-r from-orange-500/15 to-emerald-500/10 text-white'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
               >
@@ -598,8 +599,8 @@ export function ResidentDashboard() {
           </nav>
 
           <div className="flex shrink-0 items-center gap-2">
-            <span className="hidden items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-[10px] sm:flex">
-              <User className="h-3.5 w-3.5 text-emerald-400" />
+            <span className="hidden items-center gap-2 rounded-lg border border-orange-500/20 bg-orange-500/[0.07] px-3 py-2 text-[10px] sm:flex">
+              <User className="h-3.5 w-3.5 text-orange-300" />
               {user?.full_name || 'Resident'}
             </span>
             <NotificationDropdown role="resident" />
@@ -620,13 +621,13 @@ export function ResidentDashboard() {
               type="button"
               onClick={() => scrollToSection(id)}
               className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold ${
-                activeSection === id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800'
+                activeSection === id ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
               {label}
               {id === 'alerts' && unreadAlerts > 0 && (
-                <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                <span className="rounded-full bg-gradient-to-r from-orange-500 to-emerald-500 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">
                   {unreadAlerts > 99 ? '99+' : unreadAlerts}
                 </span>
               )}
@@ -638,7 +639,7 @@ export function ResidentDashboard() {
             aria-current={location.pathname === '/resident/submitted-reports' ? 'page' : undefined}
             className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold ${
               location.pathname === '/resident/submitted-reports'
-                ? 'bg-emerald-600 text-white'
+                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950'
                 : 'text-slate-400 hover:bg-slate-800'
             }`}
           >
@@ -650,7 +651,7 @@ export function ResidentDashboard() {
             aria-current={location.pathname === '/resident/report-history' ? 'page' : undefined}
             className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold ${
               location.pathname === '/resident/report-history'
-                ? 'bg-emerald-600 text-white'
+                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950'
                 : 'text-slate-400 hover:bg-slate-800'
             }`}
           >
@@ -663,13 +664,13 @@ export function ResidentDashboard() {
               type="button"
               onClick={() => scrollToSection(id)}
               className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[10px] font-semibold ${
-                activeSection === id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800'
+                activeSection === id ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
               {label}
               {id === 'alerts' && unreadAlerts > 0 && (
-                <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                <span className="rounded-full bg-gradient-to-r from-orange-500 to-emerald-500 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">
                   {unreadAlerts > 99 ? '99+' : unreadAlerts}
                 </span>
               )}
@@ -789,7 +790,7 @@ export function ResidentDashboard() {
                 </p>
                 <Link
                   to="/resident/submitted-reports"
-                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500"
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-2.5 text-xs font-bold text-slate-950 shadow-md shadow-orange-500/20 transition hover:from-orange-400 hover:to-amber-400"
                 >
                   <PlusCircle className="h-4 w-4" />
                   Submit a report
@@ -1194,8 +1195,8 @@ export function ResidentDashboard() {
         </div>
       )}
 
-      <footer className="relative border-t border-slate-800 bg-slate-900/40 px-4 py-5 text-center text-[10px] text-slate-500 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-orange-500/35 before:to-transparent">
-        BayanAlert · Live data from the community reporting database
+      <footer className="relative border-t border-orange-500/25 bg-slate-900/40 px-4 py-5 text-center text-[10px] text-slate-500 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-orange-500/35 before:via-emerald-500/20 before:to-transparent">
+        <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-gradient-to-r from-orange-400 to-emerald-400 shadow-[0_0_8px_rgba(249,115,22,0.5)]" />BayanAlert · Live data from the community reporting database</span>
       </footer>
     </div>
   );

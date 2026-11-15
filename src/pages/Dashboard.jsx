@@ -242,7 +242,7 @@ export function Dashboard() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">BayanAlert Administration</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-orange-400">BayanAlert Administration</span>
           <h1 className="text-3xl font-bold tracking-tight text-white mt-1">Good day, {user?.full_name || 'Admin'}</h1>
           <p className="text-sm text-slate-400 mt-1">
             A live operational view of BayanAlert data. Choose a register to review, add, or update records.
@@ -266,7 +266,7 @@ export function Dashboard() {
           </button>
           <Link
             to="/admin/tables/hazard_reports"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition-colors"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-md shadow-orange-500/25 transition hover:from-orange-400 hover:to-amber-400"
           >
             <span>View Reports</span>
             <ArrowRight className="w-4 h-4" />
@@ -282,34 +282,34 @@ export function Dashboard() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 relative overflow-hidden">
+        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 relative overflow-hidden transition-colors hover:border-orange-500/40">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Total Records</span>
-            <Database className="w-5 h-5 text-slate-500" />
+            <Database className="h-7 w-7 rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-1 text-cyan-300" />
           </div>
           <div className="text-3xl font-extrabold text-white tracking-tight">{Number(total_records).toLocaleString()}</div>
           <p className="text-xs text-slate-500 mt-1">Across {Object.keys(tables).length} BayanAlert tables</p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 relative overflow-hidden">
+        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 relative overflow-hidden transition-colors hover:border-orange-500/40">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Hazard Reports</span>
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
+            <AlertTriangle className="h-7 w-7 rounded-lg border border-orange-500/20 bg-orange-500/10 p-1 text-orange-400" />
           </div>
           <div className="text-3xl font-extrabold text-white tracking-tight">{Number(report_count).toLocaleString()}</div>
           <p className="text-xs text-slate-500 mt-1">All incident reports logged</p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 relative overflow-hidden">
+        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 relative overflow-hidden transition-colors hover:border-orange-500/40">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Pending Reports</span>
-            <Clock className="w-5 h-5 text-rose-500" />
+            <Clock className="h-7 w-7 rounded-lg border border-orange-500/20 bg-orange-500/10 p-1 text-orange-400" />
           </div>
           <div className="text-3xl font-extrabold text-white tracking-tight">{Number(pending_reports).toLocaleString()}</div>
           <p className="text-xs text-rose-400/80 mt-1">Awaiting verification & action</p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 relative overflow-hidden">
+        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 relative overflow-hidden transition-colors hover:border-orange-500/40">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Active Accounts</span>
             <Users className="w-5 h-5 text-emerald-500" />
@@ -353,7 +353,7 @@ export function Dashboard() {
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-slate-800">
                       <div
-                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        className="h-full rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-emerald-400 transition-all"
                         style={{ width: `${percentage}%` }}
                       />
                     </div>

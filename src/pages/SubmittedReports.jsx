@@ -530,16 +530,17 @@ export default function SubmittedReports({ view = 'submit' }) {
         : 'Dashboard';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-slate-700/80 bg-slate-900/80 text-white shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur-xl after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-orange-500/40 after:to-transparent">
+    <div className="min-h-screen bg-[#080E1E] text-slate-100">
+      <header className="sticky top-0 z-30 border-b border-transparent bg-[#080E1E]/90 text-white shadow-[0_1px_0_rgba(249,115,22,0.08)] backdrop-blur-xl after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-orange-500/50 after:via-cyan-500/30 after:to-slate-800/80">
         <div className="mx-auto flex min-h-[64px] max-w-[1500px] items-center justify-between gap-3 px-4 lg:px-7">
           <Link to="/resident" className="flex shrink-0 items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center">
-              <BrandLogo className="h-10 w-10" />
+            <span className="relative flex h-10 w-10 items-center justify-center">
+              <span className="absolute inset-0 rounded-full bg-gradient-to-tr from-orange-500/20 via-amber-500/10 to-cyan-500/15 blur-lg" />
+              <BrandLogo className="relative h-10 w-10" />
             </span>
             <span>
               <span className="block text-sm font-extrabold">BayanAlert</span>
-              <span className="block text-[9px] font-semibold uppercase tracking-wider text-emerald-400">
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-orange-400">
                 Community safety
               </span>
             </span>
@@ -554,7 +555,7 @@ export default function SubmittedReports({ view = 'submit' }) {
                 aria-current={activeTab === label ? 'page' : undefined}
                 className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition ${
                   activeTab === label
-                    ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                    ? 'border border-orange-500/30 bg-gradient-to-r from-orange-500/15 to-emerald-500/10 text-white'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
               >
@@ -583,7 +584,7 @@ export default function SubmittedReports({ view = 'submit' }) {
               aria-current={activeTab === label ? 'page' : undefined}
               className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-[10px] font-semibold ${
                 activeTab === label
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950'
                   : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
@@ -597,7 +598,7 @@ export default function SubmittedReports({ view = 'submit' }) {
       <main className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-7">
         <section className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-orange-400">
               Resident Portal
             </p>
             <h1 className="text-2xl font-extrabold text-white">
@@ -613,7 +614,7 @@ export default function SubmittedReports({ view = 'submit' }) {
             <button
               type="button"
               onClick={openCreateForm}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-md shadow-orange-500/20 transition hover:from-orange-400 hover:to-amber-400"
             >
               <PlusCircle className="h-4 w-4" />
               Create report
@@ -907,7 +908,7 @@ export default function SubmittedReports({ view = 'submit' }) {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-5 py-2.5 text-xs font-bold text-slate-950 shadow-md shadow-orange-500/20 transition hover:from-orange-400 hover:to-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
                   {saving
@@ -1034,7 +1035,7 @@ export default function SubmittedReports({ view = 'submit' }) {
               <Link
                 to="/resident/submitted-reports"
                 state={{ openCreateReport: true }}
-                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500"
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-md shadow-orange-500/20 transition hover:from-orange-400 hover:to-amber-400"
               >
                 <PlusCircle className="h-4 w-4" />
                 Create Report
@@ -1043,8 +1044,8 @@ export default function SubmittedReports({ view = 'submit' }) {
           )}
         </section>}
 
-        <footer className="relative py-3 text-center text-[10px] text-slate-500 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-orange-500/35 before:to-transparent">
-          BayanAlert · Community Hazard Reporting and Verification System
+        <footer className="relative border-t border-orange-500/25 py-3 text-center text-[10px] text-slate-500 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-orange-500/35 before:via-emerald-500/20 before:to-transparent">
+          <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-gradient-to-r from-orange-400 to-emerald-400 shadow-[0_0_8px_rgba(249,115,22,0.5)]" />BayanAlert · Community Hazard Reporting and Verification System</span>
         </footer>
       </main>
 

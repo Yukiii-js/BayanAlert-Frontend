@@ -138,7 +138,7 @@ export function NotificationDropdown({ role = 'resident' }) {
         <Bell className="h-4 w-4" />
         <span className="hidden text-xs font-semibold lg:inline">Notifications</span>
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[9px] font-bold leading-4 text-white">
+          <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-gradient-to-r from-orange-500 to-emerald-500 px-1 text-center text-[9px] font-bold leading-4 text-slate-950">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}

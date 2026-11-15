@@ -267,7 +267,7 @@ export function TableList() {
         {!table_info.read_only && (
           <Link
             to={`/admin/tables/${table}/create`}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition-colors self-start sm:self-auto"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-md shadow-orange-500/25 transition hover:from-orange-400 hover:to-amber-400 self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
             <span>Add Record</span>

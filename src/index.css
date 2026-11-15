@@ -4,11 +4,31 @@
 
 :root {
   color-scheme: dark;
+  --bayan-midnight: #080e1e;
+  --bayan-surface: #0f172a;
+  --bayan-surface-raised: #111827;
+  --bayan-orange: #f97316;
+  --bayan-orange-bright: #fb923c;
+  --bayan-orange-deep: #ea580c;
+  --bayan-emerald: #10b981;
+  --bayan-cyan: #06b6d4;
 }
 
 body {
   margin: 0;
-  background-color: #0b0f19;
+  background-color: var(--bayan-midnight);
+}
+
+:focus-visible {
+  outline: 2px solid rgb(249 115 22 / 70%);
+  outline-offset: 2px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgb(249 115 22 / 70%) !important;
+  box-shadow: 0 0 0 1px rgb(249 115 22 / 30%) !important;
 }
 
 .hazard-leaflet-map {

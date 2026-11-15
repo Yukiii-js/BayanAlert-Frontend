@@ -272,7 +272,7 @@ export function HazardMap({
   const [localWeather, setLocalWeather] = useState(null);
   const [weatherLayerError, setWeatherLayerError] = useState('');
   const [externalLayerState, setExternalLayerState] = useState({
-    hdx: true,
+    hdx: !selectable,
     weather: true,
     emergencyServices: true,
     potentialSites: false,
@@ -454,7 +454,6 @@ export function HazardMap({
           }
         );
         setHdxStatus('available');
-        setExternalLayerState((current) => ({ ...current, hdx: true }));
       } catch (loadError) {
         if (!active) return;
         setHdxStatus('unavailable');
@@ -948,7 +947,7 @@ export function HazardMap({
                       ...current,
                       [key]: event.target.checked,
                     }))}
-                    className="h-4 w-4 shrink-0 accent-emerald-500"
+                    className="h-4 w-4 shrink-0 accent-orange-500"
                   />
                   <span className="min-w-0 truncate">
                     <span className="font-semibold">{label}</span>{' '}
