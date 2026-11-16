@@ -364,7 +364,7 @@ export function TableForm() {
                     {[
                       ['Category', previewReport?.category_name],
                       ['Location', previewReport?.address_details],
-                      ['Reporter', previewReport?.reporter_name],
+                      ['Reporter', previewReport?.reporter_name || (previewReport?.user_id == null ? 'Deleted User' : 'Not provided')],
                       ['Reported at', previewReport?.submitted_at],
                       ['Coordinates', previewReport?.latitude != null && previewReport?.longitude != null
                         ? `${previewReport.latitude}, ${previewReport.longitude}`

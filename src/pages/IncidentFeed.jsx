@@ -407,6 +407,7 @@ export default function IncidentFeed() {
                             {report.barangay_name || 'Barangay not specified'}
                           </span>
                           <span className="font-mono">{report.reference_number || `#${reportId}`}</span>
+                          <span>Reported by {report.reporter_name || (report.user_id == null ? 'Deleted User' : 'Resident')}</span>
                         </div>
                       </div>
                       <span title={report.submitted_at || ''} className="inline-flex shrink-0 items-center gap-1 text-[10px] text-slate-500">

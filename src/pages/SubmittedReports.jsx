@@ -990,6 +990,9 @@ export default function SubmittedReports({ view = 'submit' }) {
                       <span>
                         Ref: {report.reference_number || report.report_id}
                       </span>
+                      <span>
+                        Reported by {report.reporter_name || (report.user_id == null ? 'Deleted User' : 'Resident')}
+                      </span>
                       <span>{report.category_name}</span>
                       <span>{report.station_name}</span>
                       <span className="flex items-center gap-1">

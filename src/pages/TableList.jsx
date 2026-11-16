@@ -197,7 +197,9 @@ export function TableList() {
     setIsDeleting(true);
     try {
       await api.deleteRecord(table, id);
-      setMessage('Record deleted successfully.');
+      setMessage(table === 'users'
+        ? 'User deleted. Submitted hazard reports and historical audit logs have been preserved.'
+        : 'Record deleted successfully.');
       setDeleteConfirmId(null);
       loadTableData(page, search);
     } catch (err) {
@@ -688,6 +690,9 @@ export function TableList() {
                                     {strikeCount}/3{userSuspended ? ' · Suspended' : ''}
                                   </span>
                                 </span>
+                              ) : table === 'hazard_reports' && col === 'user_id'
+                                && (val === null || val === undefined || val === '') ? (
+                                <span className="text-slate-400 italic">Deleted User</span>
                               ) : val === null || val === undefined ? (
                                 <span className="text-slate-600 italic">null</span>
                               ) : isBoolean ? (
@@ -938,7 +943,10 @@ export function TableList() {
                         {schema[col]?.label || col.replace(/_/g, ' ')}
                       </p>
                       <div className="text-sm text-slate-100">
-                        {val === null || val === undefined ? (
+                        {table === 'hazard_reports' && col === 'user_id'
+                          && (val === null || val === undefined || val === '') ? (
+                          'Deleted User'
+                        ) : val === null || val === undefined ? (
                           <span className="text-slate-500">—</span>
                         ) : isBoolean ? (
                           val === 1 || val === '1' || val === true ? (
@@ -1016,7 +1024,9 @@ export function TableList() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
             <h3 className="text-lg font-bold text-white mb-2">Delete Record</h3>
             <p className="text-sm text-slate-400 mb-6">
-              Are you sure you want to delete this record (ID: <span className="font-mono text-white">{deleteConfirmId}</span>)? This action cannot be undone.
+              {table === 'users'
+                ? 'This will permanently delete the user account and their notifications, while retaining their submitted hazard reports and audit history.'
+                : <>Are you sure you want to delete this record (ID: <span className="font-mono text-white">{deleteConfirmId}</span>)? This action cannot be undone.</>}
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
