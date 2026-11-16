@@ -29,6 +29,10 @@ function formatReportDate(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
 function EvidenceImage({ filePath, alt, className }) {
   const [hasError, setHasError] = useState(false);
 
@@ -91,7 +95,7 @@ export function Dashboard() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [approvalReview, setApprovalReview] = useState(null);
   const [approvalRecipient, setApprovalRecipient] = useState('');
-  const [sendApprovalEmail, setSendApprovalEmail] = useState(true);
+  const [sendApprovalEmail, setSendApprovalEmail] = useState(false);
   const [approvingReport, setApprovingReport] = useState(false);
   const [approvalError, setApprovalError] = useState('');
   const [approvalMessage, setApprovalMessage] = useState('');
@@ -166,17 +170,19 @@ export function Dashboard() {
   async function beginReportApproval(report) {
     setApprovalError('');
     setApprovalMessage('');
+    setSendApprovalEmail(false);
     setApprovalReview({ loading: true, report: null, department: null });
     try {
       const response = await api.getRecord('hazard_reports', report.report_id);
       const preview = response?.data?.notification || {};
+      const defaultEmail = String(preview.default_email || '').trim();
       setApprovalReview({
         loading: false,
         report: preview.report || report,
         department: preview.department || null,
       });
-      setApprovalRecipient(preview.default_email || '');
-      setSendApprovalEmail(true);
+      setApprovalRecipient(defaultEmail);
+      setSendApprovalEmail(isValidEmail(defaultEmail));
     } catch (requestError) {
       setApprovalReview(null);
       setApprovalError(requestError.message || 'Could not load approval details.');
@@ -185,7 +191,7 @@ export function Dashboard() {
 
   async function approveSelectedReport() {
     if (!selectedReport || !approvalReview?.report) return;
-    if (sendApprovalEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(approvalRecipient.trim())) {
+    if (sendApprovalEmail && !isValidEmail(approvalRecipient)) {
       setApprovalError('Enter a valid recipient email or turn off email delivery.');
       return;
     }
@@ -560,7 +566,7 @@ export function Dashboard() {
                           setSelectedReport(report);
                           setApprovalReview(null);
                           setApprovalRecipient('');
-                          setSendApprovalEmail(true);
+                          setSendApprovalEmail(false);
                           setApprovalError('');
                           setApprovalMessage('');
                           if (String(report.status || '').toLowerCase() === 'pending') {
@@ -775,28 +781,36 @@ export function Dashboard() {
                         </span>
                       )}
                     </label>
-                    <select
-                      id="approval-recipient"
-                      value={approvalRecipient}
-                      onChange={(event) => setApprovalRecipient(event.target.value)}
-                      required
-                      className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
-                    >
-                      <option value="" disabled>
-                        {approvalReview.department?.email
-                          ? `Recommended: ${approvalReview.department.email}`
-                          : 'Select a response station'}
-                      </option>
-                      {departmentContacts.map((contact) => (
-                        <option key={contact.station_id} value={contact.email}>
-                          {contact.code ? `${contact.code} — ` : ''}{contact.name} ({contact.email})
-                          {contact.contact_number ? ` · ${contact.contact_number}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                    {departmentContacts.length > 0 ? (
+                      <select
+                        id="approval-recipient"
+                        value={approvalRecipient}
+                        onChange={(event) => setApprovalRecipient(event.target.value)}
+                        required
+                        className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
+                      >
+                        <option value="" disabled>Select a response station</option>
+                        {departmentContacts.map((contact) => (
+                          <option key={contact.station_id} value={contact.email}>
+                            {contact.code ? `${contact.code} — ` : ''}{contact.name} ({contact.email})
+                            {contact.contact_number ? ` · ${contact.contact_number}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id="approval-recipient"
+                        type="email"
+                        value={approvalRecipient}
+                        onChange={(event) => setApprovalRecipient(event.target.value)}
+                        required
+                        placeholder="Enter a notification contact email"
+                        className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
+                      />
+                    )}
                     {departmentContactsError ? (
                       <p role="alert" className="mt-2 text-[10px] text-amber-300">
-                        {departmentContactsError} Apply the response-station migration to enable the database-backed contact list.
+                        No configured response-station email is available. Enter a recipient manually or turn off email delivery.
                       </p>
                     ) : selectedDepartmentContact && (
                       <div className="mt-2 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-[10px] leading-5 text-slate-400">

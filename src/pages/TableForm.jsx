@@ -15,6 +15,10 @@ import {
   EyeOff
 } from 'lucide-react';
 
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
 export function TableForm() {
   const { table, id } = useParams();
   const navigate = useNavigate();
@@ -29,7 +33,7 @@ export function TableForm() {
   const [showPassword, setShowPassword] = useState({});
   const [notificationPreview, setNotificationPreview] = useState(null);
   const [notificationEmail, setNotificationEmail] = useState('');
-  const [sendDepartmentEmail, setSendDepartmentEmail] = useState(true);
+  const [sendDepartmentEmail, setSendDepartmentEmail] = useState(false);
   const [manualPinSelected, setManualPinSelected] = useState(false);
   const [locationLookup, setLocationLookup] = useState('');
   const reverseLookupTimer = useRef(null);
@@ -46,8 +50,10 @@ export function TableForm() {
           setFields(res.data.fields || []);
           if (table === 'hazard_reports') {
             const preview = res.data.notification || null;
+            const defaultEmail = String(preview?.default_email || '').trim();
             setNotificationPreview(preview);
-            setNotificationEmail(preview?.default_email || '');
+            setNotificationEmail(defaultEmail);
+            setSendDepartmentEmail(isValidEmail(defaultEmail));
           }
 
           // Prepopulate form data
