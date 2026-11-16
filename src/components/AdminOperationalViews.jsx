@@ -195,8 +195,9 @@ function UserQuickPill({ label, children }) {
 
 function UserFlashcard({ row, onOpen }) {
   const role = rolePresentation(row.role_name);
-  const suspended = String(row.status || '').toLowerCase() === 'suspended';
-  const accountStatus = suspended ? 'Suspended' : String(row.account_status || 'Unknown');
+  const status = String(row.status || row.account_status || 'active').toLowerCase();
+  const suspended = status === 'suspended';
+  const accountStatus = suspended ? 'Suspended' : status;
   const verified = Boolean(row.email_verified_at);
 
   return (
@@ -268,7 +269,7 @@ export function UsersModerationView({
     ['suspended', 'Suspended'],
   ];
   const filteredRows = useMemo(() => rows.filter((row) => {
-    const suspended = String(row.status || '').toLowerCase() === 'suspended';
+    const suspended = String(row.status || row.account_status || '').toLowerCase() === 'suspended';
     const role = String(row.role_name || '').toLowerCase();
     if (filter === 'residents') return ['resident', 'user'].includes(role);
     if (filter === 'staff_admins') return role.includes('staff') || role.includes('responder') || role.includes('admin');
