@@ -3,6 +3,12 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { AdminHazardReportsMap } from '../components/AdminHazardReportsMap';
+import {
+  AdminOperationalKpis,
+  BarangaysDirectoryView,
+  ResponseStationsView,
+  UsersModerationView,
+} from '../components/AdminOperationalViews';
 import { 
   Search, 
   Plus, 
@@ -18,8 +24,21 @@ import {
   X,
   Check,
   Ban,
-  Eye
+  Eye,
+  Users,
+  ShieldAlert,
+  BadgeCheck,
+  MapPinned,
+  Activity,
+  Building2
 } from 'lucide-react';
+
+function hasCoordinates(record) {
+  return record?.latitude !== null && record?.latitude !== undefined
+    && record?.longitude !== null && record?.longitude !== undefined
+    && String(record.latitude).trim() !== '' && String(record.longitude).trim() !== ''
+    && Number.isFinite(Number(record.latitude)) && Number.isFinite(Number(record.longitude));
+}
 
 export function TableList() {
   const { table } = useParams();
@@ -37,6 +56,12 @@ export function TableList() {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [actioningId, setActioningId] = useState(null);
   const [highlightedReportId, setHighlightedReportId] = useState(null);
+  const [adminMetrics, setAdminMetrics] = useState(null);
+  const [allBarangays, setAllBarangays] = useState([]);
+  const [allStations, setAllStations] = useState([]);
+  const [incidentCounts, setIncidentCounts] = useState(null);
+  const [selectedBarangayId, setSelectedBarangayId] = useState(null);
+  const [operationalError, setOperationalError] = useState('');
 
   const loadTableData = async (targetPage = page, searchTerm = search) => {
     setLoading(true);
@@ -57,6 +82,71 @@ export function TableList() {
     setMessage('');
     setError('');
     loadTableData(1, '');
+  }, [table]);
+
+  useEffect(() => {
+    let active = true;
+    setAdminMetrics(null);
+    setAllBarangays([]);
+    setAllStations([]);
+    setIncidentCounts(null);
+    setOperationalError('');
+    setSelectedBarangayId(null);
+    if (!['users', 'barangays', 'stations'].includes(table)) return undefined;
+
+    api.getDashboard()
+      .then((response) => {
+        if (active) setAdminMetrics(response?.data || null);
+      })
+      .catch((requestError) => {
+        if (active) setOperationalError(requestError.message || 'Unable to load summary metrics.');
+      });
+
+    if (table === 'barangays') {
+      api.getTableRows('barangays', '', 1)
+        .then(async (response) => {
+          const firstPage = response?.data;
+          if (!Array.isArray(firstPage?.rows)) throw new Error('Barangay directory data was invalid.');
+          const pageCount = Math.ceil(Number(firstPage.total || 0) / Number(firstPage.page_size || 20));
+          const otherPages = await Promise.all(
+            Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) => (
+              api.getTableRows('barangays', '', index + 2)
+            ))
+          );
+          const completeList = [
+            ...firstPage.rows,
+            ...otherPages.flatMap((item) => item?.data?.rows || []),
+          ];
+          if (active) setAllBarangays(completeList);
+        })
+        .catch((requestError) => {
+          if (active) setOperationalError(requestError.message || 'Unable to load all barangay map records.');
+        });
+
+      api.getBarangayIncidentCounts()
+        .then((response) => {
+          if (active) setIncidentCounts(response?.data?.counts || {});
+        })
+        .catch((requestError) => {
+          if (active) setOperationalError(requestError.message || 'Unable to load barangay incident counts.');
+        });
+    }
+
+    if (table === 'stations') {
+      api.getStations()
+        .then((response) => {
+          const stations = response?.data?.stations;
+          if (!Array.isArray(stations)) throw new Error('Response station data was invalid.');
+          if (active) setAllStations(stations);
+        })
+        .catch((requestError) => {
+          if (active) setOperationalError(requestError.message || 'Unable to load response station metrics.');
+        });
+    }
+
+    return () => {
+      active = false;
+    };
   }, [table]);
 
   useEffect(() => {
@@ -185,6 +275,34 @@ export function TableList() {
   const { table_info = {}, columns = [], rows = [], total = 0, page_size = 20, schema = {} } = data || {};
   const totalPages = Math.ceil(total / (page_size || 20)) || 1;
   const primaryKey = table_info?.primary_key || 'id';
+  const operationalMetrics = table === 'users'
+    ? [
+      { label: 'Registered users', value: adminMetrics?.counts?.users ?? total, note: 'All accounts', icon: Users, tone: 'orange' },
+      { label: 'Active accounts', value: adminMetrics?.user_summary?.active ?? adminMetrics?.active_users ?? '—', note: 'Account status active', icon: Activity },
+      { label: 'Suspended accounts', value: adminMetrics?.user_summary?.suspended ?? '—', note: 'Currently suspended', icon: ShieldAlert, tone: 'orange' },
+      { label: 'Verified email', value: adminMetrics?.user_summary?.verified_email ?? '—', note: 'Email verified', icon: BadgeCheck },
+    ]
+    : table === 'barangays'
+      ? [
+        { label: 'Total barangays', value: adminMetrics?.counts?.barangays ?? total, note: 'Calapan City directory', icon: MapPinned, tone: 'orange' },
+        { label: 'Monitored', value: allBarangays.length ? allBarangays.filter((item) => item.is_active === true || item.is_active === 1 || item.is_active === '1').length : '—', note: 'Active directory entries', icon: Activity },
+        { label: 'Mapped', value: allBarangays.length ? allBarangays.filter(hasCoordinates).length : '—', note: 'Coordinates available', icon: MapPinned, tone: 'orange' },
+        { label: 'Reported incidents', value: incidentCounts ? Object.values(incidentCounts).reduce((sum, count) => sum + Number(count || 0), 0) : '—', note: 'Grouped by reporter barangay', icon: ShieldAlert },
+      ]
+      : table === 'stations'
+        ? [
+          { label: 'Response stations', value: adminMetrics?.counts?.stations ?? total, note: 'Registered units', icon: Building2, tone: 'orange' },
+          { label: 'Active', value: allStations.length ? allStations.filter((item) => item.is_active === true || item.is_active === 1 || item.is_active === '1').length : '—', note: 'Available for response', icon: Activity },
+          { label: 'With map pins', value: allStations.length ? allStations.filter(hasCoordinates).length : '—', note: 'Coordinates specified', icon: MapPinned, tone: 'orange' },
+        ]
+        : [];
+  const isOperationalTable = ['users', 'barangays', 'stations'].includes(table);
+  const pageTitle = table === 'users'
+    ? 'Users & Moderation'
+    : table === 'stations'
+      ? 'Response Stations'
+      : table_info.label || table;
+  const editPath = (recordId) => `/admin/tables/${table}/edit/${recordId}`;
 
   const handleWarningStrike = async (userId) => {
     const reason = window.prompt(
@@ -233,6 +351,40 @@ export function TableList() {
     }
   };
 
+  const handleBarangayToggle = async (record) => {
+    const barangayId = record.barangay_id;
+    const nextActive = !(record.is_active === true || record.is_active === 1 || record.is_active === '1');
+    setActioningId(barangayId);
+    setError('');
+    setMessage('');
+    try {
+      await api.updateRecord('barangays', barangayId, { is_active: nextActive ? 1 : 0 });
+      setAllBarangays((current) => current.map((barangay) => (
+        String(barangay.barangay_id) === String(barangayId)
+          ? { ...barangay, is_active: nextActive ? 1 : 0 }
+          : barangay
+      )));
+      setMessage(`${record.barangay_name} is now ${nextActive ? 'monitored' : 'inactive'}.`);
+      await loadTableData(page, search);
+    } catch (requestError) {
+      setError(requestError.message || 'Could not update barangay monitoring status.');
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleCopyContact = async (value) => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard access is unavailable in this browser.');
+      }
+      await navigator.clipboard.writeText(value);
+      setMessage('Contact number copied to clipboard.');
+    } catch (requestError) {
+      setError(requestError.message || 'Could not copy this contact number.');
+    }
+  };
+
   const handleResolveReport = async (reportId) => {
     setActioningId(reportId);
     setError('');
@@ -270,8 +422,16 @@ export function TableList() {
           </Link>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-              <Database className="w-6 h-6 text-emerald-400" />
-              {table_info.label || table}
+              {table === 'users' ? (
+                <Users className="h-6 w-6 text-orange-400" />
+              ) : table === 'barangays' ? (
+                <MapPinned className="h-6 w-6 text-emerald-400" />
+              ) : table === 'stations' ? (
+                <Building2 className="h-6 w-6 text-cyan-400" />
+              ) : (
+                <Database className="w-6 h-6 text-emerald-400" />
+              )}
+              {pageTitle}
             </h1>
             {table_info.read_only && (
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -292,6 +452,15 @@ export function TableList() {
           </Link>
         )}
       </div>
+
+      {isOperationalTable && <AdminOperationalKpis items={operationalMetrics} />}
+
+      {operationalError && (
+        <div role="alert" className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {operationalError}
+        </div>
+      )}
 
       {table === 'hazard_reports' && (
         <AdminHazardReportsMap
@@ -325,6 +494,98 @@ export function TableList() {
         </div>
       )}
 
+      {isOperationalTable ? (
+        <div className="space-y-4">
+          {loading ? (
+            <div role="status" className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-slate-900/60 py-20 text-slate-400">
+              <Loader2 className="mb-3 h-7 w-7 animate-spin text-orange-400" />
+              <p className="text-sm">Loading operational records...</p>
+            </div>
+          ) : table === 'users' ? (
+            <UsersModerationView
+              rows={rows}
+              page={page}
+              pageSize={page_size}
+              total={total}
+              search={search}
+              setSearch={setSearch}
+              onSearch={handleSearch}
+              primaryKey={primaryKey}
+              currentUserId={user?.user_id}
+              actioningId={actioningId}
+              onDetails={setSelectedRecord}
+              onWarningStrike={handleWarningStrike}
+              onSuspensionToggle={handleSuspensionToggle}
+              onEdit={editPath}
+              onDelete={setDeleteConfirmId}
+            />
+          ) : table === 'barangays' ? (
+            <BarangaysDirectoryView
+              rows={rows}
+              allBarangays={allBarangays}
+              incidentCounts={incidentCounts}
+              primaryKey={primaryKey}
+              page={page}
+              pageSize={page_size}
+              total={total}
+              search={search}
+              setSearch={setSearch}
+              onSearch={handleSearch}
+              selectedBarangayId={selectedBarangayId}
+              setSelectedBarangayId={setSelectedBarangayId}
+              actioningId={actioningId}
+              onToggle={handleBarangayToggle}
+              onDetails={setSelectedRecord}
+              onDelete={setDeleteConfirmId}
+              editPath={editPath}
+            />
+          ) : (
+            <ResponseStationsView
+              rows={rows}
+              allStations={allStations}
+              primaryKey={primaryKey}
+              page={page}
+              pageSize={page_size}
+              total={total}
+              search={search}
+              setSearch={setSearch}
+              onSearch={handleSearch}
+              onDetails={setSelectedRecord}
+              onDelete={setDeleteConfirmId}
+              editPath={editPath}
+              onCopy={handleCopyContact}
+            />
+          )}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
+              <span className="text-xs text-slate-400">
+                Showing <span className="font-semibold text-slate-200">{(page - 1) * page_size + 1}–{Math.min(page * page_size, total)}</span> of{' '}
+                <span className="font-semibold text-slate-200">{total}</span> · Page {page} of {totalPages}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  onClick={() => handlePageChange(page - 1)}
+                  aria-label="Previous page"
+                  className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-300 transition hover:border-orange-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={page >= totalPages}
+                  onClick={() => handlePageChange(page + 1)}
+                  aria-label="Next page"
+                  className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-300 transition hover:border-orange-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="space-y-5">
         <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <form onSubmit={handleSearch} className="relative w-full sm:w-96">
@@ -523,6 +784,7 @@ export function TableList() {
           )}
         </div>
       </div>
+      )}
 
       {selectedRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
@@ -556,7 +818,7 @@ export function TableList() {
                     </p>
                     <div className="text-sm text-slate-100">
                       {val === null || val === undefined ? (
-                        <span className="text-slate-500 italic">null</span>
+                        <span className="text-slate-500">—</span>
                       ) : isBoolean ? (
                         val === 1 || val === '1' || val === true ? (
                           <span className="inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300">

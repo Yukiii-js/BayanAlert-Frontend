@@ -97,6 +97,7 @@ export const api = {
 
   // Admin
   getDashboard: () => request('/admin/dashboard'),
+  getBarangayIncidentCounts: () => request('/admin/barangays/incident-counts'),
   getNotifications: () => request('/notifications'),
   markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: 'POST' }),
   createAnnouncement: (data) => request('/admin/announcements', { method: 'POST', body: data }),
