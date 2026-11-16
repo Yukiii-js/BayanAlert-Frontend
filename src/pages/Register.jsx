@@ -65,6 +65,19 @@ export function Register() {
   const [verificationEmail, setVerificationEmail] = useState('');
   const [verificationStatus, setVerificationStatus] = useState('');
   const [isSendingVerification, setIsSendingVerification] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [hasPendingOtp, setHasPendingOtp] = useState(false);
+  const [isConfirmingOtp, setIsConfirmingOtp] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = window.setTimeout(
+      () => setResendCooldown((remaining) => Math.max(0, remaining - 1)),
+      1000
+    );
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
 
   useEffect(() => {
     try {
@@ -76,10 +89,12 @@ export function Register() {
           setForm((previous) => ({ ...previous, email: verifiedEmail }));
         }
         setVerificationStatus('verified');
+        setHasPendingOtp(false);
         setVerificationEmail((verifiedEmail || form.email).trim().toLowerCase());
         setVerificationMessage('Email verified successfully. You can continue creating your account.');
       } else if (result === 'failed') {
         setVerificationStatus('failed');
+        setHasPendingOtp(false);
         setVerificationEmail(form.email.trim().toLowerCase());
         setVerificationMessage('Email verification failed. The link may be invalid or expired. Request a new one and try again.');
       }
@@ -149,6 +164,9 @@ export function Register() {
       setVerificationMessage('');
       setVerificationEmail('');
       setVerificationStatus('');
+      setHasPendingOtp(false);
+      setOtpCode('');
+      setResendCooldown(0);
     }
 
     setForm((previous) => ({
@@ -169,6 +187,7 @@ export function Register() {
     setVerificationMessage('');
     setVerificationEmail('');
     setVerificationStatus('');
+    setHasPendingOtp(false);
     try {
       sessionStorage.setItem(
         REGISTRATION_DRAFT_KEY,
@@ -180,16 +199,52 @@ export function Register() {
     try {
       const response = await api.sendRegistrationVerification(email);
       setVerificationEmail(email);
-      setVerificationStatus('pending');
+      setVerificationStatus(response?.data?.email_verified ? 'verified' : 'pending');
+      setHasPendingOtp(!response?.data?.email_verified);
+      setOtpCode('');
+      setResendCooldown(response?.data?.email_verified
+        ? 0
+        : Number(response?.data?.retry_after_seconds) || 60);
       setVerificationMessage(
-        response?.message || 'Verification link sent. Open it from your inbox.'
+        response?.message || 'Verification code sent. Enter the 6-digit code from your inbox.'
+      );
+    } catch (err) {
+      setVerificationStatus('failed');
+      setHasPendingOtp(false);
+      setVerificationEmail(email);
+      setVerificationMessage(err.message || 'Could not send a verification code.');
+    } finally {
+      setIsSendingVerification(false);
+    }
+  }
+
+  async function handleConfirmOtp() {
+    const email = form.email.trim().toLowerCase();
+    if (!/^[0-9]{6}$/.test(otpCode)) {
+      setVerificationStatus('failed');
+      setVerificationEmail(email);
+      setVerificationMessage('Enter the 6-digit verification code from your email.');
+      return;
+    }
+
+    setIsConfirmingOtp(true);
+    setVerificationMessage('');
+    try {
+      const response = await api.verifyRegistrationOtp(email, otpCode);
+      setVerificationEmail(email);
+      setVerificationStatus('verified');
+      setHasPendingOtp(false);
+      setResendCooldown(0);
+      setOtpCode('');
+      setVerificationMessage(
+        response?.message || 'Email verified successfully. You can continue creating your account.'
       );
     } catch (err) {
       setVerificationStatus('failed');
       setVerificationEmail(email);
-      setVerificationMessage(err.message || 'Could not send a verification link.');
+      setVerificationMessage(err.message || 'The verification code could not be confirmed.');
     } finally {
-      setIsSendingVerification(false);
+      setIsConfirmingOtp(false);
     }
   }
 
@@ -227,6 +282,7 @@ export function Register() {
       setVerificationMessage('');
       setVerificationEmail('');
       setVerificationStatus('');
+      setHasPendingOtp(false);
       sessionStorage.removeItem(REGISTRATION_DRAFT_KEY);
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
@@ -366,7 +422,7 @@ export function Register() {
                     disabled={isSendingVerification || !form.email.trim() || (
                       verificationStatus === 'verified'
                       && verificationEmail === form.email.trim().toLowerCase()
-                    )}
+                    ) || resendCooldown > 0}
                     className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
                   >
                     {verificationStatus === 'verified'
@@ -379,7 +435,13 @@ export function Register() {
                       {verificationStatus === 'verified'
                         && verificationEmail === form.email.trim().toLowerCase()
                         ? 'Verified'
-                        : isSendingVerification ? 'Sending' : 'Verify'}
+                        : isSendingVerification
+                          ? 'Sending...'
+                          : resendCooldown > 0
+                            ? `Resend ${String(Math.floor(resendCooldown / 60)).padStart(2, '0')}:${String(resendCooldown % 60).padStart(2, '0')}`
+                            : hasPendingOtp
+                              ? 'Resend Code'
+                              : 'Verify'}
                     </span>
                   </button>
                 </div>
@@ -404,6 +466,42 @@ export function Register() {
                 <p className="mt-1 text-[11px] leading-4 text-slate-500">
                   You may create your account before verifying, but email verification is required to sign in.
                 </p>
+                {hasPendingOtp
+                  && verificationEmail === form.email.trim().toLowerCase() && (
+                    <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <label htmlFor="registration_otp" className="mb-2 block text-xs font-semibold text-slate-300">
+                        6-digit verification code
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          id="registration_otp"
+                          name="registration_otp"
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          pattern="[0-9]{6}"
+                          maxLength={6}
+                          value={otpCode}
+                          onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="000000"
+                          aria-label="6-digit verification code"
+                          className={`${inputClass} pl-4 text-center tracking-[0.35em]`}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleConfirmOtp}
+                          disabled={isConfirmingOtp || otpCode.length !== 6}
+                          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+                        >
+                          {isConfirmingOtp && <Loader2 className="h-4 w-4 animate-spin" />}
+                          {isConfirmingOtp ? 'Checking...' : 'Confirm Code'}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-[11px] text-slate-500">
+                        The code expires in 10 minutes. You can request another after the countdown.
+                      </p>
+                    </div>
+                  )}
               </div>
 
               <div>

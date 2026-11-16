@@ -140,6 +140,10 @@ export const api = {
     method: 'POST',
     body: { email },
   }),
+  verifyRegistrationOtp: (email, code) => request('/auth/verify-registration-otp', {
+    method: 'POST',
+    body: { email, code },
+  }),
   verifyEmail: (token) => request('/auth/verify-email', { method: 'POST', body: { token } }),
   resendVerificationEmail: (email) => request('/auth/resend-verification', {
     method: 'POST',
