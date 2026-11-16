@@ -22,6 +22,8 @@ const ResidentDashboard = lazy(() => import('./pages/ResidentDashboard').then((m
   default: module.ResidentDashboard,
 })));
 
+const IncidentFeed = lazy(() => import('./pages/IncidentFeed'));
+
 const PdfReports = lazy(() => import('./pages/PdfReports').then((module) => ({
   default: module.PdfReports,
 })));
@@ -49,6 +51,17 @@ export default function App() {
               <ProtectedRoute allowedRoles={['resident', 'user']}>
                 <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-400">Loading community dashboard...</p>}>
                   <ResidentDashboard />
+                </Suspense>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/resident/incident-feed"
+            element={
+              <ProtectedRoute allowedRoles={['resident', 'user']}>
+                <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-400">Loading incident feed...</p>}>
+                  <IncidentFeed />
                 </Suspense>
               </ProtectedRoute>
             }

@@ -706,7 +706,7 @@ export function HazardMap({
         if (location.pathname.startsWith('/admin')) {
           navigate(`/admin/tables/hazard_reports?report_id=${encodedId}`);
         } else if (location.pathname.startsWith('/resident')) {
-          navigate(`/resident?report_id=${encodedId}#incident-feed`, {
+          navigate(`/resident/incident-feed?report_id=${encodedId}`, {
             state: { mapReport: report },
           });
         } else {

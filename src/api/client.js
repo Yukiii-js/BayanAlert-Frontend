@@ -154,6 +154,7 @@ export const api = {
     body: data,
   }),
   getCommunityDashboard: () => request('/reports/community'),
+  getCommunityMapReports: () => request('/reports/community-map'),
   getHazardMap: () => request('/map/reports'),
   getCalapanWeather: () => request('/weather/calapan'),
   getExternalResidentFeed: () => request('/external/resident-feed'),

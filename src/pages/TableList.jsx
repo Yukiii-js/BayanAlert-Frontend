@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { AdminHazardReportsMap } from '../components/AdminHazardReportsMap';
 import { 
   Search, 
   Plus, 
@@ -35,6 +36,7 @@ export function TableList() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [actioningId, setActioningId] = useState(null);
+  const [highlightedReportId, setHighlightedReportId] = useState(null);
 
   const loadTableData = async (targetPage = page, searchTerm = search) => {
     setLoading(true);
@@ -79,6 +81,14 @@ export function TableList() {
     };
   }, [table, location.search]);
 
+  useEffect(() => {
+    if (table !== 'hazard_reports' || !highlightedReportId) return;
+    const row = Array.from(document.querySelectorAll('[data-report-row]')).find(
+      (item) => item.dataset.reportRow === String(highlightedReportId)
+    );
+    row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightedReportId, data, table]);
+
   const handleSearch = (e) => {
     e.preventDefault();
     setPage(1);
@@ -112,7 +122,7 @@ export function TableList() {
         return {
           field: 'status',
           approveValue: 'verified',
-          rejectValue: 'rejected',
+          rejectValue: 'disputed',
           approveLabel: 'Approve',
           rejectLabel: 'Reject',
         };
@@ -148,6 +158,14 @@ export function TableList() {
       const payload = {
         [quick.field]: action === 'approve' ? quick.approveValue : quick.rejectValue,
       };
+
+      if (table === 'hazard_reports' && action === 'approve') {
+        const detail = await api.getRecord(table, id);
+        const defaultEmail = String(detail?.data?.notification?.default_email || '').trim();
+        const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(defaultEmail);
+        payload.send_department_email = validEmail;
+        payload.department_email = validEmail ? defaultEmail : '';
+      }
 
       await api.updateRecord(table, id, payload);
       setMessage(
@@ -275,6 +293,13 @@ export function TableList() {
         )}
       </div>
 
+      {table === 'hazard_reports' && (
+        <AdminHazardReportsMap
+          onReportSelect={setHighlightedReportId}
+          onReportsChanged={() => loadTableData(page, search)}
+        />
+      )}
+
       {/* Messages */}
       {message && (
         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center justify-between">
@@ -351,7 +376,15 @@ export function TableList() {
                     const isCurrentAdmin = table === 'users' && String(recordId) === String(user?.user_id);
 
                     return (
-                      <tr key={recordId || index} className="hover:bg-slate-800/40 transition-colors">
+                      <tr
+                        key={recordId || index}
+                        data-report-row={table === 'hazard_reports' ? recordId : undefined}
+                        className={`transition-colors ${
+                          table === 'hazard_reports' && String(highlightedReportId) === String(recordId)
+                            ? 'bg-orange-500/10 ring-1 ring-inset ring-orange-500/30'
+                            : 'hover:bg-slate-800/40'
+                        }`}
+                      >
                         {columns.map((col) => {
                           const val = row[col];
                           const isPk = col === primaryKey;

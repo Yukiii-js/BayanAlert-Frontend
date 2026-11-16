@@ -506,7 +506,7 @@ export default function SubmittedReports({ view = 'submit' }) {
 
   const navItems = [
     { label: 'Dashboard', to: '/resident#dashboard', icon: Activity },
-    { label: 'Incident Feed', to: '/resident#incident-feed', icon: FileWarning },
+    { label: 'Incident Feed', to: '/resident/incident-feed', icon: FileWarning },
     {
       label: 'Submit Reports',
       to: '/resident/submitted-reports',
@@ -521,7 +521,7 @@ export default function SubmittedReports({ view = 'submit' }) {
     ? 'Report History'
     : location.pathname === '/resident/submitted-reports'
       ? 'Submit Reports'
-    : location.hash === '#incident-feed'
+    : location.pathname === '/resident/incident-feed'
       ? 'Incident Feed'
       : location.hash === '#regional-advisories'
         ? 'Regional Advisories'

@@ -17,8 +17,6 @@ import {
   Radio,
   RefreshCw,
   ShieldAlert,
-  ThumbsDown,
-  ThumbsUp,
   User,
   X,
 } from 'lucide-react';
@@ -190,10 +188,6 @@ export function ResidentDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [notificationError, setNotificationError] = useState('');
-  const [voteError, setVoteError] = useState('');
-  const [votingReportId, setVotingReportId] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedReport, setSelectedReport] = useState(null);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -310,30 +304,9 @@ export function ResidentDashboard() {
     };
   }, []);
 
-  const categories = useMemo(
-    () => dashboard.category_counts.filter((category) => Number(category.total) > 0),
-    [dashboard.category_counts]
-  );
-
   const statuses = useMemo(
     () => dashboard.status_counts.filter((status) => Number(status.total) > 0),
     [dashboard.status_counts]
-  );
-
-  const communityReports = useMemo(
-    () => dashboard.reports.filter((report) => (
-      report.can_vote !== false && report.can_vote !== 0 && report.can_vote !== '0' &&
-      report.can_vote !== null
-    )),
-    [dashboard.reports]
-  );
-
-  const filteredReports = useMemo(
-    () => communityReports.filter((report) => (
-      (statusFilter === 'all' || report.status === statusFilter) &&
-      (categoryFilter === 'all' || String(report.category_id) === categoryFilter)
-    )),
-    [communityReports, statusFilter, categoryFilter]
   );
 
   const reportCount = dashboard.status_counts.reduce(
@@ -391,41 +364,9 @@ export function ResidentDashboard() {
     }
   }
 
-  async function handleReportVote(report, choice) {
-    setVoteError('');
-    setVotingReportId(report.report_id);
-
-    try {
-      const vote = report.my_vote === choice ? null : choice;
-      const response = await api.voteOnReport(report.report_id, vote);
-      const summary = response?.data;
-      if (!summary || summary.report_id !== report.report_id) {
-        throw new Error('The server returned an invalid vote response.');
-      }
-
-      setDashboard((current) => ({
-        ...current,
-        reports: current.reports.map((item) => (
-          item.report_id === report.report_id
-            ? {
-                ...item,
-                confirm_count: summary.confirm_count,
-                dispute_count: summary.dispute_count,
-                my_vote: summary.my_vote,
-              }
-            : item
-        )),
-      }));
-    } catch (requestError) {
-      setVoteError(requestError.message || 'Unable to save your vote.');
-    } finally {
-      setVotingReportId(null);
-    }
-  }
-
   const navItems = [
     { label: 'Dashboard', id: 'dashboard', icon: Activity },
-    { label: 'Incident Feed', id: 'incident-feed', icon: FileWarning },
+    { label: 'Incident Feed', id: 'incident-feed', icon: FileWarning, to: '/resident/incident-feed' },
     { label: 'Regional Advisories', id: 'regional-advisories', icon: Radio },
     { label: 'Alerts', id: 'alerts', icon: Bell },
   ];
@@ -433,6 +374,7 @@ export function ResidentDashboard() {
   useEffect(() => {
     if (!hasLoaded) return undefined;
     const sections = navItems
+      .filter(({ to }) => !to)
       .map(({ id }) => document.getElementById(id))
       .filter(Boolean);
     if (!sections.length) return undefined;
@@ -531,7 +473,17 @@ export function ResidentDashboard() {
           </Link>
 
           <nav className="hidden items-center gap-1 xl:flex">
-            {navItems.slice(0, 2).map(({ label, id, icon: Icon }) => (
+            {navItems.slice(0, 2).map(({ label, id, icon: Icon, to }) => to ? (
+              <Link
+                key={id}
+                to={to}
+                aria-current="page"
+                className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-gradient-to-r from-orange-500/15 to-emerald-500/10 px-3 py-2 text-xs font-semibold text-white"
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </Link>
+            ) : (
               <button
                 key={id}
                 type="button"
@@ -544,11 +496,6 @@ export function ResidentDashboard() {
               >
                 <Icon className="h-4 w-4" />
                 {label}
-                {id === 'alerts' && unreadAlerts > 0 && (
-                  <span className="rounded-full bg-gradient-to-r from-orange-500 to-emerald-500 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">
-                    {unreadAlerts > 99 ? '99+' : unreadAlerts}
-                  </span>
-                )}
               </button>
             ))}
             <Link
@@ -615,7 +562,17 @@ export function ResidentDashboard() {
           </div>
         </div>
         <nav className="grid grid-cols-2 gap-1 border-t border-slate-800 px-3 py-2 xl:hidden">
-          {navItems.slice(0, 2).map(({ label, id, icon: Icon }) => (
+          {navItems.slice(0, 2).map(({ label, id, icon: Icon, to }) => to ? (
+            <Link
+              key={id}
+              to={to}
+              aria-current="page"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-2 text-[10px] font-semibold text-slate-950"
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </Link>
+          ) : (
             <button
               key={id}
               type="button"
@@ -626,11 +583,6 @@ export function ResidentDashboard() {
             >
               <Icon className="h-3.5 w-3.5" />
               {label}
-              {id === 'alerts' && unreadAlerts > 0 && (
-                <span className="rounded-full bg-gradient-to-r from-orange-500 to-emerald-500 px-1.5 py-0.5 text-[9px] font-bold text-slate-950">
-                  {unreadAlerts > 99 ? '99+' : unreadAlerts}
-                </span>
-              )}
             </button>
           ))}
           <Link
@@ -817,165 +769,6 @@ export function ResidentDashboard() {
               </div>
             </aside>
           </div>
-        </section>
-
-        <section id="incident-feed" className="scroll-mt-28 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg shadow-black/10 sm:p-6">
-          <div className="flex flex-col justify-between gap-4 border-b border-slate-800 pb-4 sm:flex-row sm:items-end">
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-extrabold text-white">
-                <FileWarning className="h-5 w-5 text-emerald-400" />
-                Community incident feed
-              </h2>
-              <p className="mt-1 text-xs text-slate-400">
-                Actual hazard reports saved in the database. Personal details and exact addresses are excluded.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <select
-                aria-label="Filter reports by status"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500"
-              >
-                <option value="all">All statuses</option>
-                {statuses.map((item) => (
-                  <option key={item.status} value={item.status}>{formatStatus(item.status)}</option>
-                ))}
-              </select>
-              <select
-                aria-label="Filter reports by category"
-                value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value)}
-                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500"
-              >
-                <option value="all">All categories</option>
-                {categories.map((category) => (
-                  <option key={category.category_id} value={String(category.category_id)}>{category.category_name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {voteError && (
-            <div role="alert" className="mt-4 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
-              {voteError}
-            </div>
-          )}
-
-          <div className="space-y-3 pt-4">
-            {filteredReports.map((report) => (
-              <article key={report.report_id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-emerald-500/30">
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(17rem,auto)]">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-bold text-white">{report.title}</h3>
-                      <StatusBadge status={report.status} />
-                    </div>
-                    <p className="mt-2 text-xs leading-5 text-slate-400">{report.description}</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] text-slate-500">
-                      <span className="flex items-center gap-1.5">
-                        <MapPin className="h-3 w-3 text-emerald-400" />
-                        {report.barangay_name || 'Barangay not specified'}
-                      </span>
-                      <span>{report.category_name || 'Uncategorized'}</span>
-                      <span className="font-mono">{report.reference_number}</span>
-                    </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedReport(report)}
-                          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-300"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          View details
-                        </button>
-                      </div>
-                      <aside className="flex min-w-0 flex-col gap-3 sm:items-end sm:justify-between">
-                        <span className="flex items-center gap-1.5 text-[10px] text-slate-500 sm:justify-end">
-                          <Clock3 className="h-3.5 w-3.5" />
-                          {formatDate(report.submitted_at)}
-                        </span>
-                        {report.evidence?.[0]?.file_path && (
-                          <div className="sm:ml-auto">
-                            {isVideoEvidence(report.evidence[0]) ? (
-                              <EvidencePreview
-                                evidence={report.evidence[0]}
-                                alt={`Video evidence preview for ${report.title}`}
-                                className="h-28 w-full rounded-lg border border-slate-800 bg-black object-cover sm:w-44"
-                              />
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => setSelectedReport(report)}
-                                aria-label={`Preview report details and images for ${report.title}`}
-                                className="rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                              >
-                                <EvidenceImage
-                                  filePath={report.evidence[0].file_path}
-                                  alt={`Photo evidence preview for ${report.title}`}
-                                  className="h-28 w-full rounded-lg border border-slate-800 object-cover sm:w-44"
-                                />
-                              </button>
-                            )}
-                          </div>
-                        )}
-                        {report.can_vote === 1 || report.can_vote === '1' || report.can_vote === true ? (
-                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                            <button
-                              type="button"
-                              onClick={() => handleReportVote(report, 'confirm')}
-                              disabled={votingReportId === report.report_id}
-                              aria-pressed={report.my_vote === 'confirm'}
-                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
-                                report.my_vote === 'confirm'
-                                  ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200'
-                                  : 'border-slate-700 text-slate-300 hover:border-emerald-500/40 hover:text-emerald-300'
-                              }`}
-                            >
-                              <ThumbsUp className="h-3.5 w-3.5" />
-                              Confirm <span>{Number(report.confirm_count || 0)}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReportVote(report, 'dispute')}
-                              disabled={votingReportId === report.report_id}
-                              aria-pressed={report.my_vote === 'dispute'}
-                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
-                                report.my_vote === 'dispute'
-                                  ? 'border-rose-500/50 bg-rose-500/15 text-rose-200'
-                                  : 'border-slate-700 text-slate-300 hover:border-rose-500/40 hover:text-rose-300'
-                              }`}
-                            >
-                              <ThumbsDown className="h-3.5 w-3.5" />
-                              Dispute <span>{Number(report.dispute_count || 0)}</span>
-                            </button>
-                          </div>
-                        ) : (
-                          <p className="text-[10px] text-slate-500 sm:text-right">Voting unavailable</p>
-                        )}
-                      </aside>
-                </div>
-              </article>
-            ))}
-
-            {!filteredReports.length && (
-              <div className="py-12 text-center">
-                <FileWarning className="mx-auto mb-3 h-8 w-8 text-slate-600" />
-                <p className="text-sm font-semibold text-slate-300">
-                  {communityReports.length
-                      ? 'No reports match these filters.'
-                      : 'No incident reports from other residents are available yet.'}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {communityReports.length ? 'Try another status or category.' : 'New reports from other residents will appear here.'}
-                </p>
-              </div>
-            )}
-          </div>
-          {dashboard.reports.length >= 100 && (
-            <p className="mt-4 border-t border-slate-800 pt-3 text-center text-[10px] text-slate-500">
-              Showing the 100 most recent reports.
-            </p>
-          )}
         </section>
 
         <section id="alerts" className="scroll-mt-28 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg shadow-black/10 sm:p-6">

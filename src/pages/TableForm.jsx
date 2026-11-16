@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { HazardMap } from '../components/HazardMap';
+import { AdminLocationMapPicker } from '../components/AdminLocationMapPicker';
 import { LocationAutocomplete } from '../components/LocationAutocomplete';
 import { 
   ArrowLeft, 
@@ -36,6 +36,7 @@ export function TableForm() {
   const [sendDepartmentEmail, setSendDepartmentEmail] = useState(false);
   const [manualPinSelected, setManualPinSelected] = useState(false);
   const [locationLookup, setLocationLookup] = useState('');
+  const [barangays, setBarangays] = useState([]);
   const reverseLookupTimer = useRef(null);
   const reverseLookupController = useRef(null);
 
@@ -64,6 +65,18 @@ export function TableForm() {
           });
           setFormData(initial);
           setManualPinSelected(Boolean(initial.latitude && initial.longitude));
+          if ((res.data.fields || []).some((field) => (
+            ['latitude', 'longitude', 'barangay_id'].includes(field.form_name || field.name)
+          ))) {
+            try {
+              const barangayResponse = await api.getBarangays();
+              setBarangays(Array.isArray(barangayResponse?.data?.barangays)
+                ? barangayResponse.data.barangays
+                : []);
+            } catch (barangayError) {
+              setLocationLookup(barangayError.message || 'Barangay matching is unavailable.');
+            }
+          }
         } else {
           const res = await api.getTableOptions(table);
           setTableInfo(res.data.table_info || {});
@@ -78,6 +91,18 @@ export function TableForm() {
           });
           setFormData(initial);
           setManualPinSelected(false);
+          if ((res.data.fields || []).some((field) => (
+            ['latitude', 'longitude', 'barangay_id'].includes(field.form_name || field.name)
+          ))) {
+            try {
+              const barangayResponse = await api.getBarangays();
+              setBarangays(Array.isArray(barangayResponse?.data?.barangays)
+                ? barangayResponse.data.barangays
+                : []);
+            } catch (barangayError) {
+              setLocationLookup(barangayError.message || 'Barangay matching is unavailable.');
+            }
+          }
         }
       } catch (err) {
         setError(err.message || 'Failed to initialize form.');
@@ -115,7 +140,29 @@ export function TableForm() {
   const handleMapLocationSelect = ({ latitude, longitude }) => {
     setManualPinSelected(true);
     setLocationLookup('Looking up the selected map location...');
-    setFormData((previous) => ({ ...previous, latitude, longitude }));
+    const barangayField = fields.find((field) => (
+      (field.form_name || field.name) === 'barangay_id'
+    ));
+    const pointLat = Number(latitude);
+    const pointLng = Number(longitude);
+    const nearestBarangay = barangays.reduce((nearest, barangay) => {
+      const barangayLat = Number(barangay.latitude);
+      const barangayLng = Number(barangay.longitude);
+      if (!Number.isFinite(barangayLat) || !Number.isFinite(barangayLng)) return nearest;
+      const distance = Math.hypot(
+        (pointLat - barangayLat) * 111,
+        (pointLng - barangayLng) * 111 * Math.cos(pointLat * Math.PI / 180)
+      );
+      return !nearest || distance < nearest.distance ? { barangay, distance } : nearest;
+    }, null);
+    setFormData((previous) => ({
+      ...previous,
+      latitude,
+      longitude,
+      ...(barangayField && nearestBarangay && nearestBarangay.distance <= 3
+        ? { [barangayField.form_name || barangayField.name]: String(nearestBarangay.barangay.barangay_id) }
+        : {}),
+    }));
 
     if (reverseLookupTimer.current) window.clearTimeout(reverseLookupTimer.current);
     reverseLookupController.current?.abort();
@@ -141,10 +188,15 @@ export function TableForm() {
         if (typeof result.display_name !== 'string' || !result.display_name.trim()) {
           throw new Error('No street address was found for this map point.');
         }
-        setFormData((previous) => ({
-          ...previous,
-          address_details: result.display_name.trim().slice(0, 255),
-        }));
+        const addressField = fields.find((field) => (
+          ['address_details', 'address', 'location'].includes(field.form_name || field.name)
+        ));
+        if (addressField) {
+          setFormData((previous) => ({
+            ...previous,
+            [addressField.form_name || addressField.name]: result.display_name.trim().slice(0, 255),
+          }));
+        }
         setLocationLookup('');
       } catch (lookupError) {
         if (lookupError.name === 'AbortError') return;
@@ -163,6 +215,15 @@ export function TableForm() {
     setError('');
 
     try {
+      const requiredCoordinates = coordinateFields && fields.some((field) => (
+        ['latitude', 'longitude'].includes(field.form_name || field.name) &&
+        !field.nullable && field.default === null
+      ));
+      if (requiredCoordinates && (!formData.latitude || !formData.longitude)) {
+        setError('Select a location on the map before saving this record.');
+        return;
+      }
+
       const normalizedFormData = Object.fromEntries(
         Object.entries(formData).map(([formName, value]) => {
           const field = fields.find((item) => (item.form_name || item.name) === formName);
@@ -212,6 +273,17 @@ export function TableForm() {
     && ['approved', 'verified'].includes(statusValue)
     && !['approved', 'verified'].includes(originalStatus);
   const previewReport = notificationPreview?.report;
+  const coordinateFields = fields.some((field) => (
+    (field.form_name || field.name) === 'latitude'
+  )) && fields.some((field) => (
+    (field.form_name || field.name) === 'longitude'
+  ));
+  const addressField = fields.find((field) => (
+    ['address_details', 'address', 'location'].includes(field.form_name || field.name)
+  ));
+  const barangayField = fields.find((field) => (
+    (field.form_name || field.name) === 'barangay_id'
+  ));
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -320,7 +392,7 @@ export function TableForm() {
         <div className="space-y-5">
           {fields.map((field) => {
             const formKey = field.form_name || field.name;
-            if (table === 'hazard_reports' && ['latitude', 'longitude'].includes(formKey)) {
+            if (coordinateFields && ['latitude', 'longitude'].includes(formKey)) {
               return null;
             }
             const isRequired = (table === 'hazard_reports' && formKey === 'severity_level')
@@ -443,28 +515,38 @@ export function TableForm() {
           })}
         </div>
 
-        {table === 'hazard_reports' && (
+        {coordinateFields && (
           <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">Report location</h2>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                {table === 'hazard_reports' ? 'Report location' : 'Record location'}
+              </h2>
               <p className="mt-1 text-[10px] text-slate-500">
-                Search for a barangay or address, or click and drag the map pin. Coordinates are saved automatically.
+                Click the map or drag the pin to set coordinates. The nearest barangay and address are filled when those fields are available.
               </p>
             </div>
-            <HazardMap
-              selectable
-              height="h-[320px]"
-              selectedLocation={formData.latitude && formData.longitude
-                ? { latitude: formData.latitude, longitude: formData.longitude }
-                : null}
-              centerOnSelectedLocation={!manualPinSelected}
+            <AdminLocationMapPicker
+              latitude={formData.latitude}
+              longitude={formData.longitude}
               onLocationSelect={handleMapLocationSelect}
             />
+            {addressField && (
+              <p className="text-[10px] text-slate-400">
+                {addressField.label}: {formData[addressField.form_name || addressField.name] || 'Select a map point to look up an address.'}
+              </p>
+            )}
+            {barangayField && (
+              <p className="text-[10px] text-slate-400">
+                {barangayField.label}: {barangays.find((barangay) => (
+                  String(barangay.barangay_id) === String(formData[barangayField.form_name || barangayField.name])
+                ))?.barangay_name || 'Select a map point to match the nearest barangay.'}
+              </p>
+            )}
             <p className={`text-[10px] ${locationLookup.startsWith('Could not') ? 'text-amber-300' : 'text-slate-400'}`}>
               {locationLookup || (
                 formData.latitude && formData.longitude
                   ? `Selected: ${formData.latitude}, ${formData.longitude}`
-                  : 'No map point selected. A location pin is optional.'
+                  : 'No map point selected yet.'
               )}
             </p>
           </section>
