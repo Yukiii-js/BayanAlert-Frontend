@@ -82,6 +82,7 @@ export function TableList() {
     setPage(1);
     setMessage('');
     setError('');
+    setData(null);
     loadTableData(1, '');
   }, [table]);
 
@@ -278,7 +279,7 @@ export function TableList() {
   const primaryKey = table_info?.primary_key || 'id';
   const operationalMetrics = table === 'users'
     ? [
-      { label: 'Registered users', value: adminMetrics?.counts?.users ?? total, note: 'All accounts', icon: Users, tone: 'orange' },
+      { label: 'Registered users', value: adminMetrics?.counts?.users ?? (data ? total : '—'), note: 'All accounts', icon: Users, tone: 'orange' },
       { label: 'Active accounts', value: adminMetrics?.user_summary?.active ?? adminMetrics?.active_users ?? '—', note: 'Account status active', icon: Activity },
       { label: 'Suspended accounts', value: adminMetrics?.user_summary?.suspended ?? '—', note: 'Currently suspended', icon: ShieldAlert, tone: 'orange' },
       { label: 'Verified email', value: adminMetrics?.user_summary?.verified_email ?? '—', note: 'Email verified', icon: BadgeCheck },
@@ -523,6 +524,7 @@ export function TableList() {
               search={search}
               setSearch={setSearch}
               onSearch={handleSearch}
+              loadError={!loading && !data && Boolean(error)}
               onDetails={openRecordDetails}
             />
           ) : table === 'barangays' ? (

@@ -256,6 +256,7 @@ export function UsersModerationView({
   search,
   setSearch,
   onSearch,
+  loadError = false,
   onDetails,
 }) {
   const [filter, setFilter] = useState('all');
@@ -284,7 +285,7 @@ export function UsersModerationView({
         search={search}
         setSearch={setSearch}
         onSearch={onSearch}
-        range={`Showing ${start}–${end} of ${total}`}
+        range={loadError ? 'User data unavailable' : `Showing ${start}–${end} of ${total}`}
         placeholder="Search by name, username, email, or barangay..."
       >
         <div className="flex flex-wrap gap-1.5" aria-label="Filter users">
@@ -297,8 +298,10 @@ export function UsersModerationView({
       </SearchToolbar>
       <p className="px-1 text-[10px] text-slate-500">Filters apply instantly to this page; search checks names, usernames, email addresses, and barangays.</p>
       {filteredRows.length === 0 ? (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-5 py-16 text-center text-sm text-slate-500">
-          No users match this filter on the current page.
+        <div className={`rounded-xl border bg-slate-900/60 px-5 py-16 text-center text-sm ${loadError ? 'border-rose-500/20 text-rose-300' : 'border-slate-800 text-slate-500'}`} role={loadError ? 'alert' : undefined}>
+          {loadError
+            ? 'User records could not be loaded. Check the backend database connection and try again.'
+            : 'No users match this filter on the current page.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
