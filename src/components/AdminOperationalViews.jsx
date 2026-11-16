@@ -2,20 +2,17 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity,
+  ArrowRight,
   BadgeCheck,
   Building2,
   Copy,
-  Edit3,
   Eye,
   Mail,
   MapPin,
   MapPinned,
-  MoreHorizontal,
   Navigation,
   Phone,
   Search,
-  Trash2,
-  Users,
 } from 'lucide-react';
 import { AdminBarangayMap } from './AdminBarangayMap';
 import { AdminStationsMap } from './AdminStationsMap';
@@ -91,7 +88,14 @@ export function AdminOperationalKpis({ items = [] }) {
   );
 }
 
-function SearchToolbar({ search, setSearch, onSearch, children, range }) {
+function SearchToolbar({
+  search,
+  setSearch,
+  onSearch,
+  children,
+  range,
+  placeholder = 'Search by name, contact, or location...',
+}) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/65 p-3.5 xl:flex-row xl:items-center xl:justify-between">
       <form onSubmit={onSearch} className="relative w-full xl:max-w-sm">
@@ -100,7 +104,7 @@ function SearchToolbar({ search, setSearch, onSearch, children, range }) {
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by name, contact, or location..."
+          placeholder={placeholder}
           className="w-full rounded-lg border border-slate-700 bg-slate-950/70 py-2.5 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-orange-500/60 focus:outline-none"
         />
       </form>
@@ -128,100 +132,119 @@ function RoleBadge({ role }) {
   const normalized = String(role || 'resident').toLowerCase();
   const isAdmin = normalized.includes('admin');
   const isStaff = normalized.includes('staff') || normalized.includes('responder');
+  const label = isAdmin ? 'ADMIN' : isStaff ? 'STAFF' : 'RESIDENT';
   const tone = isAdmin
     ? 'border-orange-500/30 bg-orange-500/10 text-orange-300'
     : isStaff
       ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'
-      : 'border-slate-700 bg-slate-800 text-slate-300';
+      : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300';
   return (
     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider ${tone}`}>
-      {role || 'Resident'}
+      {label}
     </span>
   );
 }
 
-function StrikeMeter({ count = 0, suspended, reason }) {
+function rolePresentation(role) {
+  const normalized = String(role || '').toLowerCase();
+  if (normalized.includes('admin')) {
+    return {
+      label: 'Admin',
+      avatar: 'border-orange-500/30 bg-orange-500/15 text-orange-200',
+    };
+  }
+  if (normalized.includes('staff') || normalized.includes('responder')) {
+    return {
+      label: 'Staff',
+      avatar: 'border-cyan-500/30 bg-cyan-500/15 text-cyan-200',
+    };
+  }
+  return {
+    label: 'Resident',
+    avatar: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200',
+  };
+}
+
+function StrikeMeter({ count = 0, suspended }) {
   const strikes = Math.max(0, Math.min(3, Number(count) || 0));
   return (
-    <span
-      title={suspended && reason ? `Suspension reason: ${reason}` : `${strikes} of 3 warning strikes`}
-      className="inline-flex items-center gap-2 text-[10px] text-slate-400"
-    >
-      <span className="inline-flex items-center gap-1" aria-hidden="true">
+    <span className="flex items-center justify-between gap-1.5" aria-label={`${strikes} of 3 warning strikes`}>
+      <span className="grid flex-1 grid-cols-3 gap-1" aria-hidden="true">
         {[0, 1, 2].map((index) => (
           <i
             key={index}
-            className={`h-2 w-2 rounded-full ${index < strikes ? (suspended ? 'bg-rose-400' : 'bg-orange-400') : 'border border-slate-600 bg-transparent'}`}
+            className={`h-1.5 rounded-full ${index < strikes ? (suspended || strikes === 3 ? 'bg-rose-400' : 'bg-orange-400') : 'bg-slate-700'}`}
           />
         ))}
       </span>
-      <span>{strikes}/3</span>
+      <span className={`whitespace-nowrap text-[10px] font-bold ${strikes > 0 ? (suspended || strikes === 3 ? 'text-rose-300' : 'text-amber-300') : 'text-slate-500'}`}>
+        {strikes}/3
+      </span>
     </span>
   );
 }
 
-function ModerationMenu({
-  row,
-  recordId,
-  actioning,
-  onWarningStrike,
-  onSuspensionToggle,
-}) {
-  const suspended = String(row.status || '').toLowerCase() === 'suspended';
+function UserQuickPill({ label, children }) {
   return (
-    <details className="relative">
-      <summary
-        aria-label={`Moderation actions for ${row.full_name || 'user'}`}
-        title="Moderation actions"
-        className="inline-flex h-8 cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2 text-slate-400 transition hover:border-orange-500/40 hover:text-orange-300 [&::-webkit-details-marker]:hidden"
-      >
-        <MoreHorizontal className="h-4 w-4" />
-        <span className="text-[9px] font-semibold">Moderation</span>
-      </summary>
-      <div className="absolute right-0 top-9 z-20 w-48 rounded-xl border border-slate-700 bg-slate-900 p-1.5 shadow-2xl">
-        <button
-          type="button"
-          disabled={actioning || Number(row.warning_strikes) >= 3}
-          onClick={() => onWarningStrike(recordId)}
-          className="w-full rounded-lg px-3 py-2 text-left text-xs text-amber-200 transition hover:bg-amber-500/10 disabled:opacity-40"
-        >
-          Issue warning strike
-        </button>
-        <button
-          type="button"
-          disabled={actioning}
-          onClick={() => onSuspensionToggle(row)}
-          className={`w-full rounded-lg px-3 py-2 text-left text-xs transition disabled:opacity-40 ${suspended ? 'text-emerald-200 hover:bg-emerald-500/10' : 'text-rose-200 hover:bg-rose-500/10'}`}
-        >
-          {suspended ? 'Reactivate account' : 'Suspend account'}
-        </button>
-      </div>
-    </details>
+    <div className="min-w-0 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-2">
+      <p className="text-[8px] font-bold uppercase tracking-[0.13em] text-slate-500">{label}</p>
+      <div className="mt-1 truncate text-[10px] font-semibold text-slate-200">{children}</div>
+    </div>
   );
 }
 
-function UserIdentity({ row }) {
+function UserFlashcard({ row, onOpen }) {
+  const role = rolePresentation(row.role_name);
+  const suspended = String(row.status || '').toLowerCase() === 'suspended';
+  const accountStatus = suspended ? 'Suspended' : String(row.account_status || 'Unknown');
   const verified = Boolean(row.email_verified_at);
+
   return (
-    <div className="flex min-w-0 items-center gap-3">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-orange-500/20 bg-orange-500/10 text-xs font-bold text-orange-200">
-        {initials(row.full_name)}
-      </span>
-      <span className="min-w-0">
-        <span className="flex flex-wrap items-center gap-1.5 font-semibold text-slate-100">
-          <span className="truncate">{row.full_name || 'Unnamed user'}</span>
-          {verified && (
-            <span title="Email verified" className="inline-flex items-center text-emerald-300">
-              <BadgeCheck className="h-3.5 w-3.5" />
-              <span className="sr-only">Email verified</span>
+    <button
+      type="button"
+      onClick={() => onOpen(row)}
+      aria-label={`Open full profile and moderation actions for ${row.full_name || 'user'}`}
+      className="group flex h-full min-h-[218px] w-full flex-col justify-between rounded-2xl border border-slate-800/90 bg-slate-900/75 p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-500/50 hover:shadow-xl hover:shadow-orange-500/10 focus:outline-none focus:ring-2 focus:ring-orange-500/60"
+    >
+      <div className="w-full">
+        <div className="flex items-start gap-3">
+          <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full border text-xs font-bold ${role.avatar}`}>
+            {initials(row.full_name)}
+          </span>
+          <span className="min-w-0 flex-1 pt-0.5">
+            <span className="block truncate text-sm font-bold text-white">{row.full_name || 'Unnamed user'}</span>
+            <span className="mt-1 block truncate text-xs text-slate-400">
+              @{row.username || 'username unavailable'}
             </span>
-          )}
-        </span>
-        <span className="mt-0.5 block truncate text-[10px] text-slate-500">
-          {row.username ? `@${row.username} · ` : ''}{row.email || 'No email'}
-        </span>
+          </span>
+          <span className="flex shrink-0 flex-col items-end gap-1.5">
+            <RoleBadge role={row.role_name} />
+            <StatusBadge tone={suspended ? 'rose' : accountStatus.toLowerCase() === 'active' ? 'emerald' : 'orange'}>
+              <span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${suspended ? 'bg-rose-400' : accountStatus.toLowerCase() === 'active' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              {accountStatus}
+            </StatusBadge>
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          <UserQuickPill label="Barangay">{row.barangay_name || 'Unassigned'}</UserQuickPill>
+          <UserQuickPill label="Verification">
+            <span className={`inline-flex items-center gap-1 ${verified ? 'text-emerald-300' : 'text-amber-300'}`}>
+              {verified ? <BadgeCheck className="h-3 w-3" /> : null}
+              {verified ? 'Verified' : 'Unverified'}
+            </span>
+          </UserQuickPill>
+          <UserQuickPill label="Warning strikes">
+            <StrikeMeter count={row.warning_strikes} suspended={suspended} />
+          </UserQuickPill>
+        </div>
+      </div>
+
+      <span className="mt-5 flex w-full items-center justify-between border-t border-slate-800 pt-3 text-[10px] font-medium text-slate-500 transition group-hover:text-orange-300">
+        Click to view full profile &amp; actions
+        <ArrowRight className="h-3.5 w-3.5" />
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -233,166 +256,57 @@ export function UsersModerationView({
   search,
   setSearch,
   onSearch,
-  primaryKey,
-  currentUserId,
-  actioningId,
   onDetails,
-  onWarningStrike,
-  onSuspensionToggle,
-  onEdit,
-  onDelete,
 }) {
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [view, setView] = useState('table');
+  const [filter, setFilter] = useState('all');
+  const filters = [
+    ['all', 'All Users'],
+    ['residents', 'Residents'],
+    ['staff_admins', 'Staff / Admins'],
+    ['with_strikes', 'With Strikes'],
+    ['suspended', 'Suspended'],
+  ];
   const filteredRows = useMemo(() => rows.filter((row) => {
     const suspended = String(row.status || '').toLowerCase() === 'suspended';
-    const accountStatus = String(row.account_status || '').toLowerCase();
-    const statusMatches = statusFilter === 'all'
-      || (statusFilter === 'active' && !suspended && accountStatus === 'active')
-      || (statusFilter === 'suspended' && suspended)
-      || (statusFilter === 'pending' && ['pending', 'inactive'].includes(accountStatus));
     const role = String(row.role_name || '').toLowerCase();
-    const roleMatches = roleFilter === 'all'
-      || (roleFilter === 'resident' && ['resident', 'user'].includes(role))
-      || (roleFilter === 'staff' && (role.includes('staff') || role.includes('responder')))
-      || (roleFilter === 'admin' && role.includes('admin'));
-    return statusMatches && roleMatches;
-  }), [rows, statusFilter, roleFilter]);
+    if (filter === 'residents') return ['resident', 'user'].includes(role);
+    if (filter === 'staff_admins') return role.includes('staff') || role.includes('responder') || role.includes('admin');
+    if (filter === 'with_strikes') return Number(row.warning_strikes) > 0;
+    if (filter === 'suspended') return suspended;
+    return true;
+  }), [rows, filter]);
   const start = total ? (page - 1) * pageSize + 1 : 0;
   const end = Math.min(page * pageSize, total);
 
-  const actions = (row) => {
-    const id = row[primaryKey];
-    const isCurrentUser = String(id) === String(currentUserId);
-    return (
-      <div className="flex items-center justify-end gap-1.5">
-        <button type="button" onClick={() => onDetails(row)} title="View details" aria-label="View details" className="grid h-8 w-8 place-items-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-300">
-          <Eye className="h-4 w-4" />
-        </button>
-        {!isCurrentUser && (
-          <>
-            <ModerationMenu
-              row={row}
-              recordId={id}
-              actioning={String(actioningId) === String(id)}
-              onWarningStrike={onWarningStrike}
-              onSuspensionToggle={onSuspensionToggle}
-            />
-            <Link to={onEdit(id)} title="Edit user" aria-label="Edit user" className="grid h-8 w-8 place-items-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-cyan-300">
-              <Edit3 className="h-4 w-4" />
-            </Link>
-            <button type="button" onClick={() => onDelete(id)} title="Delete user" aria-label="Delete user" className="grid h-8 w-8 place-items-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300">
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </>
-        )}
-      </div>
-    );
-  };
-
   return (
     <section className="space-y-3">
-      <SearchToolbar search={search} setSearch={setSearch} onSearch={onSearch} range={`Showing ${start}–${end} of ${total}`}>
-        <div className="flex flex-wrap gap-1.5" aria-label="Account status filter">
-          {['all', 'active', 'suspended', 'pending'].map((filter) => (
-            <FilterPill key={filter} selected={statusFilter === filter} onClick={() => setStatusFilter(filter)}>
-              {filter === 'all' ? 'All status' : filter}
+      <SearchToolbar
+        search={search}
+        setSearch={setSearch}
+        onSearch={onSearch}
+        range={`Showing ${start}–${end} of ${total}`}
+        placeholder="Search by name, username, email, or barangay..."
+      >
+        <div className="flex flex-wrap gap-1.5" aria-label="Filter users">
+          {filters.map(([key, label]) => (
+            <FilterPill key={key} selected={filter === key} onClick={() => setFilter(key)}>
+              {label}
             </FilterPill>
           ))}
         </div>
-        <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label="Filter by role" className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1.5 text-[10px] font-bold text-slate-300">
-          <option value="all">All roles</option>
-          <option value="admin">Admin</option>
-          <option value="staff">Staff</option>
-          <option value="resident">Resident</option>
-        </select>
-        <div className="flex rounded-lg border border-slate-700 bg-slate-950 p-1" aria-label="Users view">
-          <button type="button" onClick={() => setView('table')} aria-pressed={view === 'table'} className={`rounded-md px-2.5 py-1 text-[10px] font-bold ${view === 'table' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>Table</button>
-          <button type="button" onClick={() => setView('grid')} aria-pressed={view === 'grid'} className={`rounded-md px-2.5 py-1 text-[10px] font-bold ${view === 'grid' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>Grid</button>
-        </div>
       </SearchToolbar>
-      <p className="px-1 text-[10px] text-slate-500">Status and role filters apply to the currently loaded page.</p>
-
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
-        {filteredRows.length === 0 ? (
-          <div className="px-5 py-16 text-center text-sm text-slate-500">No users match these filters on this page.</div>
-        ) : view === 'table' ? (
-          <>
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[740px] text-left text-xs">
-              <thead className="border-b border-slate-800 bg-slate-950/80 text-[9px] uppercase tracking-[0.16em] text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">User</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Account status</th>
-                  <th className="px-4 py-3">Warnings</th>
-                  <th className="sticky right-0 bg-slate-950 px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/70">
-                {filteredRows.map((row) => {
-                  const suspended = String(row.status || '').toLowerCase() === 'suspended';
-                  const accountStatus = String(row.account_status || 'unknown');
-                  return (
-                    <tr key={row[primaryKey]} className="transition hover:bg-slate-800/30">
-                      <td className="max-w-[360px] px-4 py-3.5"><UserIdentity row={row} /></td>
-                      <td className="px-4 py-3.5"><RoleBadge role={row.role_name} /></td>
-                      <td className="px-4 py-3.5">
-                        <StatusBadge tone={suspended ? 'rose' : accountStatus === 'active' ? 'emerald' : 'orange'} title={suspended && row.suspension_reason ? `Suspension reason: ${row.suspension_reason}` : undefined}>
-                          {suspended ? 'Suspended' : accountStatus}
-                        </StatusBadge>
-                      </td>
-                      <td className="px-4 py-3.5"><StrikeMeter count={row.warning_strikes} suspended={suspended} reason={row.suspension_reason} /></td>
-                      <td className="sticky right-0 bg-slate-900 px-4 py-3.5 text-right">{actions(row)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="grid gap-3 p-3 md:hidden">
-            {filteredRows.map((row) => {
-              const suspended = String(row.status || '').toLowerCase() === 'suspended';
-              const accountStatus = String(row.account_status || 'unknown');
-              return (
-                <article key={row[primaryKey]} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <UserIdentity row={row} />
-                    {actions(row)}
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <RoleBadge role={row.role_name} />
-                    <StatusBadge tone={suspended ? 'rose' : accountStatus === 'active' ? 'emerald' : 'orange'}>{suspended ? 'Suspended' : accountStatus}</StatusBadge>
-                    <StrikeMeter count={row.warning_strikes} suspended={suspended} reason={row.suspension_reason} />
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-          </>
-        ) : (
-          <div className="grid gap-3 p-3 md:grid-cols-2">
-            {filteredRows.map((row) => {
-              const suspended = String(row.status || '').toLowerCase() === 'suspended';
-              const accountStatus = String(row.account_status || 'unknown');
-              return (
-                <article key={row[primaryKey]} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <UserIdentity row={row} />
-                    {actions(row)}
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <RoleBadge role={row.role_name} />
-                    <StatusBadge tone={suspended ? 'rose' : accountStatus === 'active' ? 'emerald' : 'orange'}>{suspended ? 'Suspended' : accountStatus}</StatusBadge>
-                    <StrikeMeter count={row.warning_strikes} suspended={suspended} reason={row.suspension_reason} />
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <p className="px-1 text-[10px] text-slate-500">Filters apply instantly to this page; search checks names, usernames, email addresses, and barangays.</p>
+      {filteredRows.length === 0 ? (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-5 py-16 text-center text-sm text-slate-500">
+          No users match this filter on the current page.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredRows.map((row) => (
+            <UserFlashcard key={row.user_id} row={row} onOpen={onDetails} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

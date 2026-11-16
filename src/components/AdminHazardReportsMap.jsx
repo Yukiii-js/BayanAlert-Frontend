@@ -9,6 +9,8 @@ import {
   MapPin,
   RefreshCw,
   Send,
+  ThumbsDown,
+  ThumbsUp,
   X,
 } from 'lucide-react';
 import { api, publicFileUrl } from '../api/client';
@@ -282,6 +284,16 @@ export function AdminHazardReportsMap({
                         : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
                   }`}>
                     {status.replaceAll('_', ' ') || 'unknown'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300">
+                    <ThumbsUp className="h-3.5 w-3.5" />
+                    {Number(selectedReport.confirm_count) || 0} confirms
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/25 bg-rose-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-rose-300">
+                    <ThumbsDown className="h-3.5 w-3.5" />
+                    {Number(selectedReport.dispute_count) || 0} disputes
                   </span>
                 </div>
                 <p className="text-xs leading-5 text-slate-300">

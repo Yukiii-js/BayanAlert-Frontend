@@ -56,6 +56,7 @@ export function TableList() {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [actioningId, setActioningId] = useState(null);
   const [highlightedReportId, setHighlightedReportId] = useState(null);
+  const [suspensionReasonInput, setSuspensionReasonInput] = useState('');
   const [adminMetrics, setAdminMetrics] = useState(null);
   const [allBarangays, setAllBarangays] = useState([]);
   const [allStations, setAllStations] = useState([]);
@@ -328,20 +329,24 @@ export function TableList() {
 
   const handleSuspensionToggle = async (record) => {
     const suspended = String(record.status || '').toLowerCase() === 'suspended';
-    let reason = '';
     if (suspended) {
       if (!window.confirm('Reactivate this resident account?')) return;
-    } else {
-      reason = window.prompt('Reason for suspension:', 'Suspended by an administrator.');
-      if (reason === null) return;
+    } else if (!suspensionReasonInput.trim()) {
+      setError('Enter a reason before suspending this account.');
+      return;
     }
 
     setActioningId(record.user_id);
     setError('');
     setMessage('');
     try {
-      const response = await api.setUserSuspension(record.user_id, !suspended, reason.trim());
+      const response = await api.setUserSuspension(
+        record.user_id,
+        !suspended,
+        suspended ? '' : suspensionReasonInput.trim()
+      );
       setMessage(response?.message || (suspended ? 'Account reactivated.' : 'Account suspended.'));
+      setSuspensionReasonInput('');
       setSelectedRecord(null);
       await loadTableData(page, search);
     } catch (requestError) {
@@ -349,6 +354,14 @@ export function TableList() {
     } finally {
       setActioningId(null);
     }
+  };
+
+  const openRecordDetails = (record) => {
+    if (table === 'users') {
+      setSuspensionReasonInput(String(record.suspension_reason || ''));
+      setError('');
+    }
+    setSelectedRecord(record);
   };
 
   const handleBarangayToggle = async (record) => {
@@ -510,14 +523,7 @@ export function TableList() {
               search={search}
               setSearch={setSearch}
               onSearch={handleSearch}
-              primaryKey={primaryKey}
-              currentUserId={user?.user_id}
-              actioningId={actioningId}
-              onDetails={setSelectedRecord}
-              onWarningStrike={handleWarningStrike}
-              onSuspensionToggle={handleSuspensionToggle}
-              onEdit={editPath}
-              onDelete={setDeleteConfirmId}
+              onDetails={openRecordDetails}
             />
           ) : table === 'barangays' ? (
             <BarangaysDirectoryView
@@ -659,6 +665,14 @@ export function TableList() {
                             <td key={col} className="px-4 py-3 whitespace-nowrap max-w-xs truncate text-slate-300 font-sans">
                               {isPk ? (
                                 <span className="font-mono text-emerald-400 font-semibold">{val}</span>
+                              ) : table === 'hazard_reports' && ['confirm_count', 'dispute_count'].includes(col) ? (
+                                <span className={`inline-flex min-w-14 items-center justify-center rounded-full border px-2.5 py-1 font-semibold ${
+                                  col === 'confirm_count'
+                                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+                                    : 'border-rose-500/25 bg-rose-500/10 text-rose-300'
+                                }`}>
+                                  {Number(val) || 0}
+                                </span>
                               ) : table === 'users' && col === 'full_name' ? (
                                 <span className="inline-flex items-center gap-2">
                                   <span>{String(val || 'Unnamed user')}</span>
@@ -787,12 +801,18 @@ export function TableList() {
       )}
 
       {selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+        <div className={`fixed inset-0 z-50 flex bg-slate-950/80 backdrop-blur-sm ${table === 'users' ? 'justify-end p-0 sm:p-4' : 'items-center justify-center p-4'}`}>
+          <div className={`w-full overflow-y-auto border border-slate-800 bg-slate-900 shadow-2xl ${table === 'users' ? 'h-full max-h-full max-w-2xl rounded-none sm:rounded-2xl' : 'max-h-[85vh] max-w-4xl rounded-2xl'}`}>
             <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400">Record details</p>
-                <h3 className="mt-1 text-2xl font-bold text-white">{table_info.label || table}</h3>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400">
+                  {table === 'users' ? 'User profile & moderation' : 'Record details'}
+                </p>
+                <h3 className="mt-1 text-2xl font-bold text-white">
+                  {table === 'users'
+                    ? selectedRecord.full_name || selectedRecord.username || 'User profile'
+                    : table_info.label || table}
+                </h3>
               </div>
               <button
                 type="button"
@@ -804,39 +824,139 @@ export function TableList() {
               </button>
             </div>
 
-            <div className="grid gap-4 p-6 md:grid-cols-2">
-              {columns.map((col) => {
-                const val = selectedRecord[col];
-                const isBoolean =
-                  typeof val === 'boolean' ||
-                  /^(tinyint\(1\)|boolean|bool)/i.test(schema[col]?.type || '');
+            {table === 'users' ? (() => {
+              const role = String(selectedRecord.role_name || selectedRecord.role || '').toLowerCase();
+              const isResident = role === 'resident';
+              const isSuspended = String(selectedRecord.status || selectedRecord.account_status || '').toLowerCase() === 'suspended';
+              const isCurrentAdmin = role === 'admin'
+                && String(selectedRecord.user_id) === String(user?.user_id ?? user?.id);
+              const strikes = Math.max(0, Number(selectedRecord.warning_strikes || 0));
+              const details = [
+                ['User ID', selectedRecord.user_id],
+                ['Full name', selectedRecord.full_name],
+                ['Username', selectedRecord.username ? `@${selectedRecord.username}` : null],
+                ['Email address', selectedRecord.email],
+                ['Email verified timestamp', selectedRecord.email_verified_at],
+                ['Role', selectedRecord.role_name || selectedRecord.role],
+                ['Assigned barangay', selectedRecord.barangay_name],
+                ['Full address details', [selectedRecord.address_details, selectedRecord.barangay_name].filter(Boolean).join(', ')],
+                ['Warning strikes', `${Math.min(strikes, 3)}/3`],
+                ['Account status', selectedRecord.status || selectedRecord.account_status],
+                ['Suspension reason', selectedRecord.suspension_reason],
+                ['Created at', selectedRecord.created_at],
+                ['Updated at', selectedRecord.updated_at],
+              ];
 
-                return (
-                  <div key={col} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
-                    <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                      {schema[col]?.label || col.replace(/_/g, ' ')}
-                    </p>
-                    <div className="text-sm text-slate-100">
-                      {val === null || val === undefined ? (
-                        <span className="text-slate-500">—</span>
-                      ) : isBoolean ? (
-                        val === 1 || val === '1' || val === true ? (
-                          <span className="inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
-                            active
-                          </span>
-                        ) : (
-                          <span className="inline-flex rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">
-                            inactive
-                          </span>
-                        )
-                      ) : (
-                        String(val)
-                      )}
-                    </div>
+              return (
+                <div className="space-y-5 p-6">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {details.map(([label, value]) => (
+                      <div key={label} className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+                        <p className="break-words text-sm text-slate-100">{value === null || value === undefined || value === '' ? 'Not provided' : String(value)}</p>
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
+
+                  {!isCurrentAdmin && isResident && (
+                    <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Moderation controls</h4>
+                        <p className="mt-1 text-xs text-slate-500">Warning strikes suspend resident accounts automatically at 3/3.</p>
+                      </div>
+                      {error && <p role="alert" className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-xs text-rose-300">{error}</p>}
+                      {!isSuspended && (
+                        <label className="block">
+                          <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Suspension reason</span>
+                          <textarea
+                            value={suspensionReasonInput}
+                            onChange={(event) => setSuspensionReasonInput(event.target.value)}
+                            rows={2}
+                            maxLength={500}
+                            placeholder="Required before suspending this account"
+                            className="w-full resize-y rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-orange-500/50"
+                          />
+                        </label>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleWarningStrike(selectedRecord.user_id)}
+                          disabled={actioningId === selectedRecord.user_id || strikes >= 3}
+                          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-bold text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {actioningId === selectedRecord.user_id ? 'Processing...' : 'Issue Warning Strike'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSuspensionToggle(selectedRecord)}
+                          disabled={actioningId === selectedRecord.user_id || (!isSuspended && !suspensionReasonInput.trim())}
+                          className={`rounded-xl border px-4 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${isSuspended ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20' : 'border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20'}`}
+                        >
+                          {isSuspended ? 'Reactivate Account' : 'Suspend Account'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap justify-end gap-2 border-t border-slate-800 pt-4">
+                    <Link
+                      to={editPath(selectedRecord.user_id)}
+                      onClick={() => setSelectedRecord(null)}
+                      className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-xs font-bold text-slate-200 transition hover:border-orange-500/30 hover:text-white"
+                    >
+                      Edit User
+                    </Link>
+                    {!isCurrentAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteConfirmId(selectedRecord.user_id);
+                          setSelectedRecord(null);
+                        }}
+                        className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-xs font-bold text-rose-200 transition hover:bg-rose-500/20"
+                      >
+                        Delete User
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })() : (
+              <div className="grid gap-4 p-6 md:grid-cols-2">
+                {columns.map((col) => {
+                  const val = selectedRecord[col];
+                  const isBoolean =
+                    typeof val === 'boolean' ||
+                    /^(tinyint\(1\)|boolean|bool)/i.test(schema[col]?.type || '');
+
+                  return (
+                    <div key={col} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                        {schema[col]?.label || col.replace(/_/g, ' ')}
+                      </p>
+                      <div className="text-sm text-slate-100">
+                        {val === null || val === undefined ? (
+                          <span className="text-slate-500">—</span>
+                        ) : isBoolean ? (
+                          val === 1 || val === '1' || val === true ? (
+                            <span className="inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                              active
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                              inactive
+                            </span>
+                          )
+                        ) : (
+                          String(val)
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {currentReview && (
               <div className="flex items-center justify-end gap-3 border-t border-slate-800 px-6 py-4">
